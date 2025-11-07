@@ -17,10 +17,16 @@ import java.util.List;
 public class ApsWorkCenterMaintenanceService {
 
     private ApsWorkCenterMaintenanceRepository repository;
+    private MesBaseWorkCenterService mesBaseWorkCenterService;
 
     @Autowired
     public void setRepository(ApsWorkCenterMaintenanceRepository repository) {
         this.repository = repository;
+    }
+
+    @Autowired
+    public void setMesBaseWorkCenterService(MesBaseWorkCenterService mesBaseWorkCenterService) {
+        this.mesBaseWorkCenterService = mesBaseWorkCenterService;
     }
 
     @Transactional("mysqlTransactionManager")
@@ -45,6 +51,66 @@ public class ApsWorkCenterMaintenanceService {
         }
     }
 
+    /**
+     * 创建所有工作中心的工作日历
+     *
+     * @param startDate 开始日期
+     * @param endDate   结束日期
+     * @return 创建的工作日历数量
+     */
+    @Transactional("mysqlTransactionManager")
+    public int createWorkCalendarForAllCenters(LocalDate startDate, LocalDate endDate) {
+        // 直接获取所有工作中心信息，避免额外的查询
+        List<MesBaseWorkCenter> allWorkCenters = mesBaseWorkCenterService.findAll();
+        int totalCreated = 0;
+
+        if (allWorkCenters == null || allWorkCenters.isEmpty()) {
+            return 0;
+        }
+
+        for (MesBaseWorkCenter baseWorkCenter : allWorkCenters) {
+            List<ApsWorkCenterMaintenance> workCenterMaintenances = new ArrayList<>();
+
+            // 为每个工作中心在指定日期范围内创建工作日历
+            for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+                ApsWorkCenterMaintenance workCenterMaintenance = new ApsWorkCenterMaintenance();
+                workCenterMaintenance.setId(RandomFun.getInstance().getRandom());
+                workCenterMaintenance.setStatus("Active");
+                workCenterMaintenance.setWorkCenterCode(baseWorkCenter.getWorkCenterCode());
+                workCenterMaintenance.setLocalDate(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                workCenterMaintenance.setStartTime(date.atTime(9, 0).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+                workCenterMaintenance.setEndTime(date.atTime(17, 30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+                workCenterMaintenance.setCapacity(480L);
+                workCenterMaintenance.setDescription(baseWorkCenter.getDescription() + " - 工作日历");
+                workCenterMaintenances.add(workCenterMaintenance);
+            }
+
+            // 批量保存当前工作中心的所有工作日历
+            saveAll(workCenterMaintenances);
+            totalCreated += workCenterMaintenances.size();
+        }
+
+        return totalCreated;
+    }
+
+
+    /**
+     * 保存所有工作中心维护计划
+     *
+     * @param workCenterMaintenances 工作中心维护计划列表
+     */
+
+    @Transactional("mysqlTransactionManager")
+    public void saveAll(List<ApsWorkCenterMaintenance> workCenterMaintenances) {
+        repository.saveAll(workCenterMaintenances);
+    }
+
+    /**
+     * 根据工作中心代码查询所有维护计划
+     *
+     * @param workCenterCodes 工作中心代码列表
+     * @return 工作中心维护计划列表
+     */
     public List<ApsWorkCenterMaintenance> findAllByWorkCenterCodeIn(List<String> workCenterCodes) {
         return repository.findAllByWorkCenterCodeIn(workCenterCodes);
     }

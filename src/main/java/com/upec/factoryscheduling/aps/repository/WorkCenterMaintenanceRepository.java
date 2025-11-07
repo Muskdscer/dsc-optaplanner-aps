@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Repository
-public interface MachineMaintenanceRepository extends JpaRepository<WorkCenterMaintenance, String> {
+public interface WorkCenterMaintenanceRepository extends JpaRepository<WorkCenterMaintenance, String> {
 
     WorkCenterMaintenance findFirstByWorkCenterAndDate(WorkCenter machine, LocalDate date);
 

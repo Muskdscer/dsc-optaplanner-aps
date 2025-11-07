@@ -2,15 +2,12 @@ package com.upec.factoryscheduling.aps.service;
 
 import com.upec.factoryscheduling.aps.entity.WorkCenter;
 import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
-import com.upec.factoryscheduling.aps.repository.MachineMaintenanceRepository;
-import com.upec.factoryscheduling.aps.repository.TimeslotRepository;
+import com.upec.factoryscheduling.aps.repository.WorkCenterMaintenanceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
-import org.springframework.web.client.RestTemplate;
 
-import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -31,7 +28,7 @@ import java.util.stream.Collectors;
 public class WorkCenterMaintenanceService {
 
     /** 设备维护仓库 - 用于访问设备维护数据 */
-    private MachineMaintenanceRepository maintenanceRepository;
+    private WorkCenterMaintenanceRepository maintenanceRepository;
 
     /** 工作中心服务 - 提供工作中心相关的业务逻辑 */
     private WorkCenterService workCenterService;
@@ -42,7 +39,7 @@ public class WorkCenterMaintenanceService {
      * @param maintenanceRepository 设备维护仓库实例
      */
     @Autowired
-    public void setMaintenanceRepository(MachineMaintenanceRepository maintenanceRepository) {
+    public void setMaintenanceRepository(WorkCenterMaintenanceRepository maintenanceRepository) {
         this.maintenanceRepository = maintenanceRepository;
     }
 
@@ -176,8 +173,7 @@ public class WorkCenterMaintenanceService {
                 workCenterMaintenance.setStartTime(maintenance.getStartTime());
             }
             if (maintenance.getEndTime() != null) {
-                // 注意：这里有个潜在bug，应该是设置endTime而不是startTime
-                workCenterMaintenance.setStartTime(maintenance.getEndTime());
+                workCenterMaintenance.setEndTime(maintenance.getEndTime());
             }
 
             // 计算容量（持续时间）

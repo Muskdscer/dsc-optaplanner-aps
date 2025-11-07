@@ -26,4 +26,12 @@ public class MesBaseWorkCenterService {
     public List<MesBaseWorkCenter> findByIdIn(List<String> workCenterId) {
         return mesBaseWorkCenterRepository.findAllById(workCenterId);
     }
+    
+    /**
+     * 获取所有工作中心
+     * @return 所有工作中心列表
+     */
+    public List<MesBaseWorkCenter> findAll() {
+        return mesBaseWorkCenterRepository.findAll();
+    }
 }

@@ -3,7 +3,7 @@ package com.upec.factoryscheduling.aps.controller;
 import com.upec.factoryscheduling.aps.entity.WorkCenter;
 import com.upec.factoryscheduling.aps.service.WorkCenterService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import com.upec.factoryscheduling.utils.ApiResponse;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,8 +37,8 @@ public class MachineController {
      * @return 包含工作中心列表的响应实体，HTTP状态码为200 OK
      */
     @GetMapping  // HTTP GET请求，路径为/api/machines
-    public ResponseEntity<List<WorkCenter>> getAllMachines() {
-        return ResponseEntity.ok(workCenterService.getAllMachines());
+    public ApiResponse<List<WorkCenter>> getAllMachines() {
+        return ApiResponse.success(workCenterService.getAllMachines());
     }
 
     /**
@@ -49,10 +49,11 @@ public class MachineController {
      * @return 如果找到工作中心，返回包含工作中心对象的响应实体（状态码200 OK）；否则返回404 Not Found
      */
     @GetMapping("/{id}")  // HTTP GET请求，路径为/api/machines/{id}
-    public ResponseEntity<WorkCenter> getMachineById(@PathVariable String id) {  // 从URL路径中提取ID参数
+    public ApiResponse<WorkCenter> getMachineById(@PathVariable String id) {  // 从URL路径中提取ID参数
+        // 调用服务层方法获取工作中心，返回Optional对象
         return workCenterService.getMachineById(id)
-                .map(ResponseEntity::ok)  // 找到记录时返回200 OK
-                .orElse(ResponseEntity.notFound().build());  // 未找到记录时返回404 Not Found
+                .map(ApiResponse::success)  // 找到记录时返回成功响应
+                .orElse(ApiResponse.error("未找到指定ID的工作中心"));  // 未找到记录时返回错误响应
     }
 
     /**
@@ -63,8 +64,8 @@ public class MachineController {
      * @return 包含创建后的工作中心列表的响应实体，HTTP状态码为200 OK
      */
     @PostMapping  // HTTP POST请求，路径为/api/machines
-    public ResponseEntity<List<WorkCenter>> createMachines(@RequestBody List<WorkCenter> machines) {  // 从请求体中提取工作中心列表
-        return ResponseEntity.ok(workCenterService.create(machines));
+    public ApiResponse<List<WorkCenter>> createMachines(@RequestBody List<WorkCenter> machines) {  // 从请求体中提取工作中心列表
+        return ApiResponse.success(workCenterService.create(machines));
     }
 
     /**
@@ -76,8 +77,8 @@ public class MachineController {
      * @return 包含更新后的工作中心对象的响应实体，HTTP状态码为200 OK
      */
     @PutMapping("/{id}")  // HTTP PUT请求，路径为/api/machines/{id}
-    public ResponseEntity<WorkCenter> updateMachine(@PathVariable String id, @RequestBody WorkCenter machine) {
-        return ResponseEntity.ok(workCenterService.updateMachine(id, machine));
+    public ApiResponse<WorkCenter> updateMachine(@PathVariable String id, @RequestBody WorkCenter machine) {
+        return ApiResponse.success(workCenterService.updateMachine(id, machine));
     }
 
     /**
@@ -88,8 +89,8 @@ public class MachineController {
      * @return 无内容的响应实体，HTTP状态码为200 OK
      */
     @DeleteMapping("/{id}")  // HTTP DELETE请求，路径为/api/machines/{id}
-    public ResponseEntity<Void> deleteMachine(@PathVariable String id) {
+    public ApiResponse<Void> deleteMachine(@PathVariable String id) {
         workCenterService.deleteMachine(id);
-        return ResponseEntity.ok().build();  // 返回200 OK，无响应体
+        return ApiResponse.success();  // 返回成功响应，无响应体
     }
 }

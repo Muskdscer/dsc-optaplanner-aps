@@ -64,7 +64,7 @@ public class MySQLJPAConfig {
         jpaProperties.put("hibernate.order_updates", "true");
         jpaProperties.put("hibernate.batch_versioned_data", "true");
         jpaProperties.put("hibernate.dialect", "org.hibernate.dialect.MySQL8Dialect");
-        jpaProperties.put("hibernate.hbm2ddl.auto", "none");
+        jpaProperties.put("hibernate.hbm2ddl.auto", "update");
         jpaProperties.put("hibernate.connection.charSet", "UTF-8");
         jpaProperties.put("hibernate.connection.useUnicode", "true");
         jpaProperties.put("hibernate.connection.defaultNCharacterStreams", "true");
@@ -74,6 +74,10 @@ public class MySQLJPAConfig {
         jpaProperties.put("hibernate.flushMode", "ALWAYS");
         // 禁用二级缓存，避免缓存导致的数据不同步
         jpaProperties.put("hibernate.cache.use_second_level_cache", "false");
+        // 增加JDBC超时时间（秒）
+        jpaProperties.put("hibernate.jdbc.time_zone", "Asia/Shanghai");
+        // 配置事务超时相关属性
+        jpaProperties.put("hibernate.connection.handling_mode", "DELAYED_ACQUISITION_AND_HOLD");
         return jpaProperties;
     }
 
@@ -86,8 +90,8 @@ public class MySQLJPAConfig {
     public PlatformTransactionManager transactionManager(@Qualifier("mySqlSessionFactory") LocalContainerEntityManagerFactoryBean entityManagerFactory) {
         JpaTransactionManager transactionManager = new JpaTransactionManager();
         transactionManager.setEntityManagerFactory(entityManagerFactory.getObject());
-        // 设置为自动提交模式
-        transactionManager.setDefaultTimeout(30);
+        // 增加事务超时时间到5分钟（300秒），避免长时间运行的事务超时
+        transactionManager.setDefaultTimeout(300);
         return transactionManager;
     }
 

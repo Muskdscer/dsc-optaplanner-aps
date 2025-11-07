@@ -62,12 +62,19 @@ public class H2JPAConfig {
         jpaProperties.put("hibernate.connection.charSet", "UTF-8");
         jpaProperties.put("hibernate.connection.useUnicode", "true");
         jpaProperties.put("hibernate.connection.defaultNCharacterStreams", "true");
+        // 增加时区设置
+        jpaProperties.put("hibernate.jdbc.time_zone", "Asia/Shanghai");
+        // 配置事务超时相关属性
+        jpaProperties.put("hibernate.connection.handling_mode", "DELAYED_ACQUISITION_AND_HOLD");
         return jpaProperties;
     }
 
     @Bean("h2TransactionManager")
     public PlatformTransactionManager transactionManager(@Qualifier("h2SessionFactory") EntityManagerFactory factory) {
-        return new JpaTransactionManager(factory);
+        JpaTransactionManager transactionManager = new JpaTransactionManager(factory);
+        // 增加事务超时时间到5分钟（300秒），避免长时间运行的事务超时
+        transactionManager.setDefaultTimeout(300);
+        return transactionManager;
     }
 
     @Bean("h2Template")

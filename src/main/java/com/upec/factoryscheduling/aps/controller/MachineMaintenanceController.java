@@ -3,7 +3,7 @@ package com.upec.factoryscheduling.aps.controller;
 import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
 import com.upec.factoryscheduling.aps.service.WorkCenterMaintenanceService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import com.upec.factoryscheduling.utils.ApiResponse;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,8 +37,8 @@ public class MachineMaintenanceController {
      * @return 包含生成的维护计划列表的响应实体，HTTP状态码为200 OK
      */
     @PostMapping("/auto")  // HTTP POST请求，路径为/api/maintenance/auto
-    public ResponseEntity<List<WorkCenterMaintenance>> auto() {
-        return ResponseEntity.ok(maintenanceService.auto());
+    public ApiResponse<List<WorkCenterMaintenance>> auto() {
+        return ApiResponse.success(maintenanceService.auto());
     }
 
     /**
@@ -49,9 +49,9 @@ public class MachineMaintenanceController {
      * @return 无内容的响应实体，HTTP状态码为200 OK
      */
     @PostMapping("/all")  // HTTP POST请求，路径为/api/maintenance/all
-    public ResponseEntity<Void> createAll(@RequestBody List<WorkCenterMaintenance> maintenances) {
+    public ApiResponse<Void> createAll(@RequestBody List<WorkCenterMaintenance> maintenances) {
         maintenanceService.saveAllMaintenance(maintenances);
-        return ResponseEntity.ok().build();  // 返回200 OK，无响应体
+        return ApiResponse.success();  // 返回成功响应
     }
 
     /**
@@ -62,7 +62,7 @@ public class MachineMaintenanceController {
      * @return 包含更新后的维护计划列表的响应实体，HTTP状态码为200 OK
      */
     @PostMapping("/updateAll")  // HTTP POST请求，路径为/api/maintenance/updateAll
-    public ResponseEntity<List<WorkCenterMaintenance>> updateAll(@RequestBody List<WorkCenterMaintenance> maintenances){
-        return ResponseEntity.ok(maintenanceService.updateAll(maintenances));
+    public ApiResponse<List<WorkCenterMaintenance>> updateAll(@RequestBody List<WorkCenterMaintenance> maintenances){
+        return ApiResponse.success(maintenanceService.updateAll(maintenances));
     }
 }

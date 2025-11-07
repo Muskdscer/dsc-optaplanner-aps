@@ -3,7 +3,7 @@ package com.upec.factoryscheduling.aps.controller;
 import com.upec.factoryscheduling.aps.entity.Order;
 import com.upec.factoryscheduling.aps.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import com.upec.factoryscheduling.utils.ApiResponse;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,8 +37,8 @@ public class OrderController {
      * @return 订单列表，包含所有订单对象
      */
     @GetMapping  // HTTP GET请求，路径为/api/orders
-    public List<Order> getAllOrders() {
-        return orderService.getAllOrders();
+    public ApiResponse<List<Order>> getAllOrders() {
+        return ApiResponse.success(orderService.getAllOrders());
     }
 
     /**
@@ -49,10 +49,10 @@ public class OrderController {
      * @return 如果找到订单，返回包含订单对象的响应实体（状态码200 OK）；否则返回404 Not Found
      */
     @GetMapping("/{id}")  // HTTP GET请求，路径为/api/orders/{id}
-    public ResponseEntity<Order> getOrderById(@PathVariable String id) {  // 从URL路径中提取ID参数
+    public ApiResponse<Order> getOrderById(@PathVariable String id) {  // 从URL路径中提取ID参数
         return orderService.getOrderById(id)
-                .map(ResponseEntity::ok)  // 找到记录时返回200 OK
-                .orElse(ResponseEntity.notFound().build());  // 未找到记录时返回404 Not Found
+                .map(ApiResponse::success)  // 找到记录时返回成功响应
+                .orElse(ApiResponse.error("未找到指定ID的订单"));  // 未找到记录时返回错误响应
     }
 
     /**
@@ -63,8 +63,8 @@ public class OrderController {
      * @return 包含创建后的订单列表的响应实体，HTTP状态码为200 OK
      */
     @PostMapping  // HTTP POST请求，路径为/api/orders
-    public ResponseEntity<List<Order>> createOrders(@RequestBody List<Order> orders) {  // 从请求体中提取订单列表
-        return ResponseEntity.ok(orderService.createOrders(orders));
+    public ApiResponse<List<Order>> createOrders(@RequestBody List<Order> orders) {  // 从请求体中提取订单列表
+        return ApiResponse.success(orderService.createOrders(orders));
     }
 
     /**
@@ -75,8 +75,8 @@ public class OrderController {
      * @return 无内容的响应实体，HTTP状态码为200 OK
      */
     @DeleteMapping("/{id}")  // HTTP DELETE请求，路径为/api/orders/{id}
-    public ResponseEntity<Void> deleteOrder(@PathVariable String id) {
+    public ApiResponse<Void> deleteOrder(@PathVariable String id) {
         orderService.deleteOrder(id);
-        return ResponseEntity.ok().build();  // 返回200 OK，无响应体
+        return ApiResponse.success();  // 返回成功响应
     }
 }

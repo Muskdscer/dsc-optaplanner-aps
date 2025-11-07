@@ -11,7 +11,6 @@ import org.optaplanner.core.api.score.ScoreExplanation;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolverStatus;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -74,9 +73,9 @@ public class SchedulingController {
      * @return HTTP响应，包含操作结果消息
      */
     @PostMapping("/stop/{problemId}")
-    public ResponseEntity<String> stopScheduling(@PathVariable Long problemId) {
+    public ApiResponse<String> stopScheduling(@PathVariable Long problemId) {
         schedulingService.stopScheduling(problemId);
-        return ResponseEntity.ok("Scheduling stopped for problem " + problemId);
+        return ApiResponse.success("Scheduling stopped for problem " + problemId);
     }
 
     /**
@@ -87,13 +86,13 @@ public class SchedulingController {
      * @return 包含最佳解决方案的HTTP响应
      */
     @GetMapping("/solution/{problemId}")
-    public ResponseEntity<FactorySchedulingSolution> getBestSolution(@PathVariable Long problemId) {
+    public ApiResponse<FactorySchedulingSolution> getBestSolution(@PathVariable Long problemId) {
         FactorySchedulingSolution solution = schedulingService.getBestSolution(problemId);
         // 注意：此处有一段无实际作用的循环代码，在实际优化中应移除
         for (Timeslot timeslot : solution.getTimeslots()) {
             int i = 1;
         }
-        return ResponseEntity.ok(solution);
+        return ApiResponse.success(solution);
     }
 
     /**
@@ -104,9 +103,9 @@ public class SchedulingController {
      * @return 包含硬软评分的HTTP响应
      */
     @GetMapping("/score/{problemId}")
-    public ResponseEntity<HardSoftScore> getScore(@PathVariable Long problemId) {
+    public ApiResponse<HardSoftScore> getScore(@PathVariable Long problemId) {
         HardSoftScore hardSoftScore = schedulingService.getScore(problemId);
-        return ResponseEntity.ok(hardSoftScore);
+        return ApiResponse.success(hardSoftScore);
     }
 
     /**
@@ -117,9 +116,9 @@ public class SchedulingController {
      * @return 包含求解状态名称的HTTP响应
      */
     @GetMapping("/status/{problemId}")
-    public ResponseEntity<String> getStatus(@PathVariable Long problemId) {
+    public ApiResponse<String> getStatus(@PathVariable Long problemId) {
         SolverStatus isSolving = schedulingService.isSolving(problemId);
-        return ResponseEntity.ok(isSolving.name());
+        return ApiResponse.success(isSolving.name());
     }
 
     /**
@@ -130,9 +129,9 @@ public class SchedulingController {
      * @return 包含可行性布尔值的HTTP响应（true表示可行）
      */
     @GetMapping("/feasible/{problemId}")
-    public ResponseEntity<Boolean> isSolutionFeasible(@PathVariable Long problemId) {
+    public ApiResponse<Boolean> isSolutionFeasible(@PathVariable Long problemId) {
         boolean isFeasible = schedulingService.isSolutionFeasible(problemId);
-        return ResponseEntity.ok(isFeasible);
+        return ApiResponse.success(isFeasible);
     }
 
     /**
@@ -144,10 +143,12 @@ public class SchedulingController {
      * @return 包含操作结果消息的HTTP响应
      */
     @PutMapping("/update/{problemId}")
-    public ResponseEntity<String> updateProblem(@PathVariable Long problemId, @RequestBody FactorySchedulingSolution updatedSolution) {
+    public ApiResponse<String> updateProblem(@PathVariable Long problemId, @RequestBody FactorySchedulingSolution updatedSolution) {
         schedulingService.updateProblem(problemId, updatedSolution);
-        return ResponseEntity.ok("Problem updated for " + problemId);
+        return ApiResponse.success("Problem updated for " + problemId);
     }
+    
+
 
     /**
      * 获取解决方案详细解释
@@ -157,8 +158,8 @@ public class SchedulingController {
      * @return 包含评分解释的HTTP响应，可用于分析调度结果的质量
      */
     @GetMapping("/explain/{problemId}")
-    public ResponseEntity<ScoreExplanation<FactorySchedulingSolution, HardSoftScore>> getExplanation(@PathVariable Long problemId) {
-        return ResponseEntity.ok(schedulingService.explainSolution(problemId));
+    public ApiResponse<ScoreExplanation<FactorySchedulingSolution, HardSoftScore>> getExplanation(@PathVariable Long problemId) {
+        return ApiResponse.success(schedulingService.explainSolution(problemId));
     }
 
 
@@ -170,8 +171,8 @@ public class SchedulingController {
      * @return 包含更新后时间槽的HTTP响应
      */
     @PostMapping("/update")
-    public ResponseEntity<Timeslot> update(@RequestBody ProcedureRequest request) {
-        return ResponseEntity.ok(timeslotService.updateTimeslot(request));
+    public ApiResponse<Timeslot> update(@RequestBody ProcedureRequest request) {
+        return ApiResponse.success(timeslotService.updateTimeslot(request));
     }
 
     /**
@@ -181,9 +182,9 @@ public class SchedulingController {
      * @return 包含操作结果消息的HTTP响应
      */
     @GetMapping("/deleteAll")
-    public ResponseEntity<String> delete() {
+    public ApiResponse<String> delete() {
         schedulingService.delete();
-        return ResponseEntity.ok("success");
+        return ApiResponse.success("success");
     }
 
     /**
@@ -194,8 +195,8 @@ public class SchedulingController {
      * @return 包含验证后解决方案的HTTP响应
      */
     @PostMapping("/validation")
-    public ResponseEntity<FactorySchedulingSolution> validation(@RequestBody FactorySchedulingSolution solution) {
-        return ResponseEntity.ok(schedulingService.validation(solution));
+    public ApiResponse<FactorySchedulingSolution> validation(@RequestBody FactorySchedulingSolution solution) {
+        return ApiResponse.success(schedulingService.validation(solution));
     }
 
     /**
@@ -206,8 +207,8 @@ public class SchedulingController {
      * @return 包含处理结果的HTTP响应（目前返回空列表）
      */
     @PostMapping("/receiveTimeslot")
-    public ResponseEntity<List<Timeslot>> receiveTimeslot(@RequestBody List<Timeslot> timeslots) {
+    public ApiResponse<List<Timeslot>> receiveTimeslot(@RequestBody List<Timeslot> timeslots) {
         // 注意：当前实现返回空列表，可能需要根据实际业务需求完善
-        return ResponseEntity.ok(new ArrayList<>());
+        return ApiResponse.success(new ArrayList<>());
     }
 }
