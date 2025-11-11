@@ -53,9 +53,6 @@ public class Timeslot implements Serializable {
     @OneToOne(fetch = FetchType.EAGER)
     @PlanningVariable(valueRangeProviderRefs = "maintenanceRange")
     private WorkCenterMaintenance maintenance; // 维护计划作为规划变量
-
-    // 不再使用独立的dailyHours字段，通过duration计算得出
-    // private int dailyHours;
     
     // 通过duration字段计算分钟数，保持与现有代码的兼容性
     public int getDailyHours() {
@@ -73,6 +70,4 @@ public class Timeslot implements Serializable {
     
     // 用于工序顺序约束
     private Integer procedureOrder; // 工序序号
-    // 不再使用nextProcedureId字段，通过Procedure的nextProcedure链表结构实现工序顺序约束
-    // private String nextProcedureId; // 下一道工序ID
 }
