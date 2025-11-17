@@ -36,8 +36,6 @@ public class FactorySchedulingSolution {
     @PlanningEntityCollectionProperty  // 标记这是规划实体的集合，OptaPlanner将优化这些实体的规划变量
     private List<Timeslot> timeslots;
 
-    // 工作中心不再作为规划变量，因此移除workCenterRange字段
-    
     /**
      * 时间范围 - 可用的时间点列表
      * <p>为规划变量提供可能的开始时间值范围</p>
@@ -55,13 +53,6 @@ public class FactorySchedulingSolution {
     @ProblemFactCollectionProperty  // 标记这是问题事实（约束条件）
     @JsonIgnore  // JSON序列化时忽略此字段
     private List<WorkCenterMaintenance> maintenances;
-
-    /**
-     * 解决方案验证结果列表
-     * <p>包含对规划结果的验证信息</p>
-     */
-    private List<ValidateSolution> validateSolutions;
-
     /**
      * 规划分数 - 评估解决方案质量的指标
      * <p>使用HardSoftScore类型，包含硬约束和软约束的违反情况：
@@ -86,26 +77,15 @@ public class FactorySchedulingSolution {
     }
 
     /**
-     * 创建工厂调度解决方案的构造函数（不含维护计划）
-     * @param timeslots 需要安排的时间槽（工序）列表
-     * @param workCenters 可用的工作中心（设备/机器）列表 - 保留参数以保持兼容性
-     * @param timeslotRange 可用的时间范围列表
-     */
-    public FactorySchedulingSolution(List<Timeslot> timeslots, List<WorkCenter> workCenters, 
-                                   List<LocalDateTime> timeslotRange) {
-        this.timeslots = timeslots;
-        this.timeslotRange = timeslotRange;
-    }
-    
-    /**
      * 创建工厂调度解决方案的构造函数（含维护计划）
-     * @param timeslots 需要安排的时间槽（工序）列表
-     * @param workCenters 可用的工作中心（设备/机器）列表 - 保留参数以保持兼容性
+     *
+     * @param timeslots     需要安排的时间槽（工序）列表
      * @param timeslotRange 可用的时间范围列表
-     * @param maintenances 工作中心维护计划列表
+     * @param maintenances  工作中心维护计划列表
      */
-    public FactorySchedulingSolution(List<Timeslot> timeslots, List<WorkCenter> workCenters, 
-                                   List<LocalDateTime> timeslotRange, List<WorkCenterMaintenance> maintenances) {
+    public FactorySchedulingSolution(List<Timeslot> timeslots,
+                                     List<LocalDateTime> timeslotRange,
+                                     List<WorkCenterMaintenance> maintenances) {
         this.timeslots = timeslots;
         this.timeslotRange = timeslotRange;
         this.maintenances = maintenances;

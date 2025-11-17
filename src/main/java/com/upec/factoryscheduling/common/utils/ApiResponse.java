@@ -36,6 +36,10 @@ public class ApiResponse<T> {
     public static <T> ApiResponse<T> error(String msg) {
         return response(null, -1, msg);
     }
+    public static <T> ApiResponse<T> error(Integer code,String msg) {
+        return response(null, code, msg);
+    }
+
 
     private static <T> ApiResponse<T> response(T data, Integer code, String msg) {
         ApiResponse<T> apiResponse = new ApiResponse<>();

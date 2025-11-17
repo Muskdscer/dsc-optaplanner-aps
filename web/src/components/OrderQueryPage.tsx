@@ -15,8 +15,8 @@ import {
     Card
 } from 'antd';
 import type {ColumnsType} from 'antd/es/table';
-import {queryOrderTasksWithPagination, syncOrderData} from '../services/api.ts';
-import type {OrderTask, OrderTaskQueryParams} from '../services/model.ts';
+import {queryOrderTasksWithPagination, syncOrderData} from '../services/orderService';
+import type {OrderTask, OrderTaskQueryParams} from '../services/orderService';
 
 const {Title} = Typography;
 const {RangePicker} = DatePicker;

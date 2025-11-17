@@ -37,17 +37,6 @@ public class OrderController {
     }
 
     /**
-     * 获取所有订单
-     * <p>查询系统中所有的订单列表。</p>
-     * 
-     * @return 订单列表，包含所有订单对象
-     */
-    @GetMapping  // HTTP GET请求，路径为/api/orders
-    public ApiResponse<List<Order>> getAllOrders() {
-        return ApiResponse.success(orderService.getAllOrders());
-    }
-
-    /**
      * 根据ID获取订单
      * <p>根据指定的ID查询特定的订单信息。</p>
      * 

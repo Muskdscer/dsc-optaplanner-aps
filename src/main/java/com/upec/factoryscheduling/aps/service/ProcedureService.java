@@ -35,4 +35,13 @@ public class ProcedureService {
         procedureRepository.deleteAll();
     }
 
+
+    public List<Procedure> findAllByIdIsIn(List<String> ids) {
+        return procedureRepository.findAllByIdIsIn(ids);
+    }
+
+    public List<Procedure> findAllByTaskNoIsIn(List<String> taskNos) {
+        return procedureRepository.findAllByTaskNoIsIn(taskNos);
+    }
+
 }

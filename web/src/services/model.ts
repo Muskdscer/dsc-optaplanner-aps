@@ -1,3 +1,7 @@
+// ====================================
+// 基础数据模型定义
+// ====================================
+
 // 订单任务数据类型定义
 export interface OrderTask {
   taskNo: string;
@@ -27,7 +31,11 @@ export interface Task {
   priority: number;
 }
 
-// 查询参数接口
+// ====================================
+// 查询参数接口定义
+// ====================================
+
+// 订单任务查询参数接口
 export interface OrderTaskQueryParams {
   orderName?: string;
   startTime?: string;
@@ -40,13 +48,9 @@ export interface OrderTaskQueryParams {
   taskStatus?: string;
 }
 
-// API响应接口，适配新的返回格式
-export interface ApiResponse<T> {
-  code: number;
-  msg: string;
-  data: T;
-  total?: number;
-}
+// ====================================
+// 分页相关接口定义
+// ====================================
 
 // 排序接口
 export interface Sort {
@@ -87,4 +91,58 @@ export interface PageResponse {
   totalPages: number;
   pageSize: number;
   pageNum: number;
+}
+
+// ====================================
+// API通用响应接口定义
+// ====================================
+
+// API响应接口，适配新的返回格式
+export interface ApiResponse<T> {
+  code: number;
+  msg: string;
+  data: T;
+  total?: number;
+}
+
+// ====================================
+// 认证相关接口定义
+// ====================================
+
+// 登录请求接口
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+// 登录响应接口
+export interface LoginResponse {
+  token: string;
+  type: string;
+  username: string;
+  email: string;
+  phone: string;
+}
+
+// 注册请求接口
+export interface RegisterRequest {
+  username: string;
+  password: string;
+  email: string;
+  phone: string;
+}
+
+// 注册响应接口
+export interface RegisterResponse {
+  code: number;
+  msg: string;
+  data: string;
+}
+
+// 用户信息接口
+export interface UserInfo {
+  username: string;
+  name?: string;
+  permissions?: string[];
+  isLoggedIn: boolean;
 }

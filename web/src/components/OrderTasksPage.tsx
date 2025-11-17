@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Space, Typography, message, Form, Input, DatePicker, Select, Row, Col, Card, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { queryTasks, startTasks } from '../services/api.ts';
-import type { Task, OrderTaskQueryParams } from '../services/model.ts';
+import { queryTasks, startTasks } from '../services/orderService';
+import type { Task, OrderTaskQueryParams } from '../services/orderService';
 
 const { Title } = Typography;
 const { RangePicker } = DatePicker;

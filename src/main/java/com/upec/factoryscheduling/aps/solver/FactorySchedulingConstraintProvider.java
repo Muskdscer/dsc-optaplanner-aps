@@ -79,22 +79,18 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     if (timeslot.getProcedure().getEndTime() != null) {
                         return true; // 已完成的工序不应再被规划
                     }
-                    
                     // 检查Procedure的startTime是否不为空且与时间槽开始时间不同
-                    if (timeslot.getProcedure().getStartTime() != null && 
-                        !timeslot.getStartTime().equals(timeslot.getProcedure().getStartTime())) {
+                    if (timeslot.getProcedure().getStartTime() != null &&
+                            !timeslot.getStartTime().equals(timeslot.getProcedure().getStartTime())) {
                         return true; // 必须使用固定的开始时间
                     }
-                    
                     // 检查Order的factStartDate是否不为空且与时间槽开始时间不同
                     if (timeslot.getOrder() != null && timeslot.getOrder().getFactStartDate() != null &&
-                        !timeslot.getStartTime().equals(timeslot.getOrder().getFactStartDate())) {
+                            !timeslot.getStartTime().equals(timeslot.getOrder().getFactStartDate())) {
                         return true; // 必须使用订单的实际开始时间
                     }
-
                     return false; // 没有违反约束
-                })
-                .penalize("Fixed start time violation", HardSoftScore.ONE_HARD);
+                }).penalize("Fixed start time violation", HardSoftScore.ONE_HARD);
     }
     
     /**
@@ -107,7 +103,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                 // 跳过手动设置的时间槽，它们不需要优化开始时间
                 .filter(timeslot -> !timeslot.isManual())
                 .filter(timeslot -> timeslot.getOrder() != null && timeslot.getStartTime() != null &&
-                        timeslot.getOrder().getPlanStartDate() != null && timeslot.getSliceIndex() == 0)
+                        timeslot.getOrder().getPlanStartDate() != null && timeslot.getIndex() == 0)
                 .penalize("Order start date proximity", HardSoftScore.ofSoft(1),
                         timeslot -> {
                             // 计算时间槽开始时间与订单计划开始时间的差异（分钟）
@@ -171,19 +167,19 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
         return constraintFactory.forEach(Timeslot.class)
                 .filter(timeslot -> timeslot.getProcedure() != null && 
                         timeslot.getEndTime() != null && 
-                        timeslot.getSliceIndex() != null && 
-                        timeslot.getTotalSlices() != null && 
-                        timeslot.getSliceIndex().equals(timeslot.getTotalSlices() - 1) && // 只考虑最后一个分片
+                        timeslot.getIndex() != null &&
+                        timeslot.getTotal() != null &&
+                        timeslot.getIndex().equals(timeslot.getTotal() - 1) && // 只考虑最后一个分片
                         timeslot.getProcedure().getNextProcedure() != null && !timeslot.getProcedure().getNextProcedure().isEmpty())
                 .join(Timeslot.class, 
                         Joiners.filtering((prev, next) -> {
                             if (prev.getProcedure() == null || next.getProcedure() == null || 
                                 next.getStartTime() == null || prev.getEndTime() == null || 
-                                next.getSliceIndex() == null) {
+                                next.getTotal() == null) {
                                 return false;
                             }
                             // 检查当前timeslot是否是后续工序的第一个分片
-                            boolean isFirstSliceOfNextProcedure = next.getSliceIndex() == 0;
+                            boolean isFirstSliceOfNextProcedure = next.getIndex() == 0;
                             // 检查next的procedure是否在prev的procedure的nextProcedure列表中
                             boolean isNextProcedure = prev.getProcedure().getNextProcedure().stream()
                                     .anyMatch(p -> p.getId().equals(next.getProcedure().getId()));
@@ -221,17 +217,14 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                                 timeslot.getStartTime().toLocalDate() != maintenance.getDate()) {
                                 return false;
                             }
-                            
                             // 状态为'n'表示维护中，不能安排工序
                             if ("n".equals(maintenance.getStatus())) {
                                 return true; // 硬约束违反
                             }
-                            
                             // 只有当状态为'y'或null时才检查时间范围
                             if (!"y".equals(maintenance.getStatus()) && maintenance.getStatus() != null) {
                                 return false; // 其他状态不处理
                             }
-                            
                             // 将维护时间转换为与timeslot相同日期的LocalDateTime进行比较
                             LocalDateTime maintenanceStartDateTime = LocalDateTime.of(
                                     maintenance.getDate(), 
@@ -239,7 +232,6 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                             LocalDateTime maintenanceEndDateTime = LocalDateTime.of(
                                     maintenance.getDate(), 
                                     maintenance.getEndTime());
-                            
                             // 检查工序是否完全在允许工作的时间范围内
                             // 如果工序开始时间早于维护允许时间，或结束时间晚于维护允许时间，则冲突
                             return timeslot.getStartTime().isBefore(maintenanceStartDateTime) || 
@@ -416,13 +408,13 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      */
     private Constraint procedureSlicePreferContinuous(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getSliceIndex() != null && timeslot.getSliceIndex() > 0 && 
-                                   timeslot.getTotalSlices() != null && timeslot.getTotalSlices() > 1 && 
+                .filter(timeslot -> timeslot.getIndex() != null && timeslot.getIndex() > 0 &&
+                                   timeslot.getIndex() != null && timeslot.getIndex() > 1 &&
                                    timeslot.getStartTime() != null && timeslot.getProcedure() != null)
                 .join(Timeslot.class,
                         Joiners.equal(t -> t.getProcedure() != null ? t.getProcedure().getId() : null, 
                                      t -> t.getProcedure() != null ? t.getProcedure().getId() : null),
-                        Joiners.equal(t -> t.getSliceIndex() != null ? t.getSliceIndex() - 1 : -1, Timeslot::getSliceIndex))
+                        Joiners.equal(t -> t.getIndex() != null ? t.getIndex() - 1 : -1, Timeslot::getIndex))
                 .filter((current, previous) -> previous.getEndTime() != null && current.getStartTime() != null && 
                                                !current.getStartTime().equals(previous.getEndTime()))
                 .penalize("Procedure slice prefer continuous", HardSoftScore.ONE_SOFT, (current, previous) -> {

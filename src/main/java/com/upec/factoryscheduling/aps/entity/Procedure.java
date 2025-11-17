@@ -50,6 +50,6 @@ public class Procedure implements Serializable {
 
     private String status;
 
-    private boolean isParallel;
+    private boolean parallel;
 
 }

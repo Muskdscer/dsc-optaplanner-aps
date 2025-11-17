@@ -8,7 +8,7 @@ import OrderQueryPage from './components/OrderQueryPage';
 import OrderTasksPage from './components/OrderTasksPage';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
-import { isLoggedIn, logout } from './services/authService';
+import { isLoggedIn, logout } from './services/orderService';
 import 'antd/dist/reset.css';
 import './App.css';
 

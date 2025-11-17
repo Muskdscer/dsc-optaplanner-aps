@@ -31,7 +31,7 @@ public class OrderTaskService {
     public List<Task> saveAll(List<Task> tasks) {
         return taskRepository.saveAll(tasks);
     }
-    
+
     /**
      * 使用JPA实现的分页查询方法，通过开始时间、结束时间、任务号模糊查询和任务状态过滤
      *
@@ -52,7 +52,7 @@ public class OrderTaskService {
         if (pageSize == null || pageSize < 1) {
             pageSize = 20; // 默认每页20条
         }
-        
+
         // 创建分页对象
         Pageable pageable = PageRequest.of(pageNum - 1, pageSize, Sort.by(Sort.Direction.DESC, "planStartDate"));
         Specification<Task> specification = (root, query, criteriaBuilder) -> {
@@ -78,6 +78,10 @@ public class OrderTaskService {
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
         // 使用JPA Criteria API构建查询
-        return taskRepository.findAll(specification,pageable);
+        return taskRepository.findAll(specification, pageable);
+    }
+
+    public List<Task> findAllByTaskNoIsIn(List<String> taskNos) {
+        return taskRepository.findAllByTaskNoIsIn(taskNos);
     }
 }

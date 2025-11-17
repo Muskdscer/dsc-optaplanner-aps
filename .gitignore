@@ -33,3 +33,4 @@ build/
 .vscode/
 .trae/
 .logs/
+/logs/

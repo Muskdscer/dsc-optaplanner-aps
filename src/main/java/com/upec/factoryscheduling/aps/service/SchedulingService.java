@@ -257,7 +257,7 @@ public class SchedulingService {
         
         // 使用正确的构造函数创建解决方案实例
         // 参数依次为：时间槽列表、工作中心列表、时间槽范围、维护计划列表
-        return new FactorySchedulingSolution(timeslots, workCenters, timeslotRange, maintenances);
+        return new FactorySchedulingSolution(timeslots, timeslotRange, maintenances);
     }
     
     /**
@@ -320,8 +320,8 @@ public class SchedulingService {
                     if (procCompare != 0) return procCompare;
                     
                     // 然后按分片索引排序
-                    return Integer.compare(t1.getSliceIndex() != null ? t1.getSliceIndex() : 0, 
-                                          t2.getSliceIndex() != null ? t2.getSliceIndex() : 0);
+                    return Integer.compare(t1.getIndex() != null ? t1.getIndex() : 0,
+                                          t2.getIndex() != null ? t2.getIndex() : 0);
                 })
                 .collect(Collectors.toList());
             
@@ -348,7 +348,7 @@ public class SchedulingService {
         timeslotsByProcedure.forEach((procedureId, procedureSlices) -> {
             if (procedureSlices.size() > 1) {
                 // 对分片按索引排序
-                procedureSlices.sort(Comparator.comparing(Timeslot::getSliceIndex));
+                procedureSlices.sort(Comparator.comparing(Timeslot::getIndex));
                 
                 // 设置前一个分片和后一个分片的关系
                 for (int i = 0; i < procedureSlices.size(); i++) {
@@ -536,7 +536,7 @@ public class SchedulingService {
         }
         
         // 使用正确的构造函数创建解决方案实例
-        return new FactorySchedulingSolution(timeslots, new ArrayList<>(), new ArrayList<>(), maintenances);
+        return new FactorySchedulingSolution(timeslots, new ArrayList<>(), maintenances);
     }
 
     /**
@@ -618,7 +618,7 @@ public class SchedulingService {
         Map<String, List<Timeslot>> map = timeslots.stream()
                 .collect(Collectors.groupingBy(timeslot -> 
                         timeslot.getProcedure().getWorkCenterId().getWorkCenterCode() + "-" + 
-                        timeslot.getDateTime().toLocalDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+                        timeslot.getStartTime().toLocalDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
         
         // 遍历每个时间槽进行验证
         for (Timeslot timeslot : timeslots) {
@@ -629,18 +629,18 @@ public class SchedulingService {
             
             // 构建当前时间槽的设备-日期键
             String key = timeslot.getProcedure().getWorkCenterId().getWorkCenterCode() + "-" + 
-                         timeslot.getDateTime().toLocalDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                         timeslot.getStartTime().toLocalDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             
             // 获取同一天同一设备的所有时间槽
             List<Timeslot> timeslotList = map.get(key);
             
             // 计算当日累计使用工时
-            int countDailyHours = timeslotList.stream()
-                    .mapToInt(Timeslot::getDailyHours)
+            double countDailyHours = timeslotList.stream()
+                    .mapToDouble(Timeslot::getDuration)
                     .sum();
             
             // 获取时间和设备信息
-            LocalDateTime dateTime = timeslot.getDateTime();
+            LocalDateTime dateTime = timeslot.getStartTime();
             WorkCenter workCenter = timeslot.getProcedure().getWorkCenterId();
             
             // 获取设备当日的维护计划（包含容量信息）
@@ -661,10 +661,10 @@ public class SchedulingService {
             // 检查时间重叠
             long overlapTime = timeslotList.stream()
                     .mapToLong(t -> DateTimeCalculatorUtil.overlapTime(
-                            timeslot.getDateTime().getMinute(),
-                            timeslot.getDateTime().plusMinutes(timeslot.getDailyHours()).getMinute(),
-                            t.getDateTime().getMinute(),
-                            t.getDateTime().plusMinutes(t.getDailyHours()).getMinute()))
+                            timeslot.getStartTime().getMinute(),
+                            timeslot.getStartTime().plusMinutes((int)(timeslot.getDuration()*60)).getMinute(),
+                            t.getStartTime().getMinute(),
+                            t.getStartTime().plusMinutes(t.getStartTime().getMinute()).getMinute()))
                     .sum();
             
             if (overlapTime > 0) {
@@ -679,7 +679,6 @@ public class SchedulingService {
         
         // 更新解决方案对象
         solution.setTimeslots(timeslots);
-        solution.setValidateSolutions(validateSolutions);
         
         return solution;
     }

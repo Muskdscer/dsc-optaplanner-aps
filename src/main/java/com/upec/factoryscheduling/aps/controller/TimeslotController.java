@@ -5,10 +5,9 @@ import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import com.upec.factoryscheduling.common.utils.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/timeslot")
@@ -26,6 +25,15 @@ public class TimeslotController {
     @GetMapping("/list")
     public ApiResponse<FactorySchedulingSolution> queryTimeslot() {
         return ApiResponse.success(timeslotService.findAll());
+    }
+
+    @PostMapping("create")
+    public ApiResponse<Void> createTimeslot(@RequestParam("taskNos") List<String> taskNos,
+                                            @RequestParam("procedureIds") List<String> procedureIds,
+                                            @RequestParam(value = "time", defaultValue = "0.5") int time,
+                                            @RequestParam(value = "slice", defaultValue = "1") int slice) {
+        timeslotService.createTimeslot(taskNos, procedureIds, time, slice);
+        return ApiResponse.success();
     }
 
 }

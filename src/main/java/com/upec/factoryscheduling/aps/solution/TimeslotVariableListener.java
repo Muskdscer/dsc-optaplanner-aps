@@ -36,7 +36,7 @@ public class TimeslotVariableListener implements VariableListener<FactorySchedul
         // 对于手动设置的时间槽，直接设置dateTime为startTime
         if (timeslot.isManual() && timeslot.getStartTime() != null) {
             scoreDirector.beforeVariableChanged(timeslot, "dateTime");
-            timeslot.setDateTime(timeslot.getStartTime());
+            timeslot.setStartTime(timeslot.getStartTime());
             scoreDirector.afterVariableChanged(timeslot, "dateTime");
             
             // 如果手动设置了startTime，也需要更新endTime
@@ -61,7 +61,7 @@ public class TimeslotVariableListener implements VariableListener<FactorySchedul
         
         // 更新dateTime字段，与startTime保持一致
         scoreDirector.beforeVariableChanged(timeslot, "dateTime");
-        timeslot.setDateTime(timeslot.getStartTime());
+        timeslot.setStartTime(timeslot.getStartTime());
         scoreDirector.afterVariableChanged(timeslot, "dateTime");
     }
     
@@ -157,7 +157,7 @@ public class TimeslotVariableListener implements VariableListener<FactorySchedul
         // 对于手动设置的时间槽，直接设置dateTime为startTime
         if (timeslot.isManual() && timeslot.getStartTime() != null) {
             scoreDirector.beforeVariableChanged(timeslot, "dateTime");
-            timeslot.setDateTime(timeslot.getStartTime());
+            timeslot.setStartTime(timeslot.getStartTime());
             scoreDirector.afterVariableChanged(timeslot, "dateTime");
         } else {
             updateDateTime(scoreDirector, timeslot);

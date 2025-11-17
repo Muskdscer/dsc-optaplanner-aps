@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, message, Layout, Divider } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
-import { login } from '../services/authService';
+import { login, type LoginResponse } from '../services/orderService';
 
 const { Title, Text } = Typography;
 const { Content } = Layout;
@@ -14,13 +14,14 @@ const LoginPage: React.FC = () => {
   const handleLogin = async (values: { username: string; password: string }) => {
     setLoading(true);
     try {
-      const response = await login(values.username, values.password);
-      if (response.success) {
+      const response: LoginResponse = await login(values.username, values.password);
+      if (response.type === "Bearer") {
         message.success('登录成功');
         // 登录成功后跳转到首页
         window.location.href = '/';
       } else {
-        message.error(response.message || '登录失败');
+        message.error('登录失败，请重试');
+        console.error('登录错误:', response);
       }
     } catch (error) {
       message.error('登录失败，请重试');

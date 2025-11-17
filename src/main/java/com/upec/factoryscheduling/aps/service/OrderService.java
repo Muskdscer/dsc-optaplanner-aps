@@ -28,10 +28,6 @@ public class OrderService {
         return orderRepository.findById(id);
     }
 
-    public Order findFirstByOrderNo(String orderNo) {
-        return orderRepository.findFirstByOrderNo(orderNo);
-    }
-
     @Transactional("h2TransactionManager")
     public Order save(Order order) {
         return orderRepository.save(order);

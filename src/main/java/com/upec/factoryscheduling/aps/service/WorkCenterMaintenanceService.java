@@ -94,7 +94,6 @@ public class WorkCenterMaintenanceService {
     public List<WorkCenterMaintenance> autoCreateMaintenance(WorkCenter machine) {
         LocalDate now = LocalDate.now();
         List<WorkCenterMaintenance> maintenances = new ArrayList<>();
-
         // 为未来30天每天创建维护计划
         for (int i = 1; i <= 30; i++) {
             // 创建维护计划对象，持续时间为480分钟（8小时）
@@ -157,14 +156,12 @@ public class WorkCenterMaintenanceService {
             if (maintenance.getStartTime().isAfter(maintenance.getEndTime())) {
                 throw new IllegalArgumentException("开始时间不能晚于结束时间");
             }
-
             // 查找数据库中对应的记录
             WorkCenterMaintenance workCenterMaintenance =
                     maintenanceRepository.findById(maintenance.getId()).orElse(null);
             if (workCenterMaintenance == null) {
                 return null; // 记录不存在，跳过
             }
-
             // 更新字段
             if (maintenance.getStatus() != null) {
                 workCenterMaintenance.setStatus(maintenance.getStatus());
@@ -175,7 +172,6 @@ public class WorkCenterMaintenanceService {
             if (maintenance.getEndTime() != null) {
                 workCenterMaintenance.setEndTime(maintenance.getEndTime());
             }
-
             // 计算容量（持续时间）
             assert maintenance.getEndTime() != null;
             workCenterMaintenance
