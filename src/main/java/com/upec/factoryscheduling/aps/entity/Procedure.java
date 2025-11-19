@@ -11,6 +11,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.upec.factoryscheduling.aps.solution.ProcedureVariableListener;
+
 @Data
 @Getter
 @Setter
@@ -44,8 +46,16 @@ public class Procedure implements Serializable {
 
     private LocalDateTime endTime;
 
+    @org.optaplanner.core.api.domain.variable.ShadowVariable(
+        variableListenerClass = ProcedureVariableListener.class,
+        sourceVariableName = "timeslots"
+    )
     private LocalDate planStartDate;
 
+    @org.optaplanner.core.api.domain.variable.ShadowVariable(
+        variableListenerClass = ProcedureVariableListener.class,
+        sourceVariableName = "timeslots"
+    )
     private LocalDate planEndDate;
 
     private String status;

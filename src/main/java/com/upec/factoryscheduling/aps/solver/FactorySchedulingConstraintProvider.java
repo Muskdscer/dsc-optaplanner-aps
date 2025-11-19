@@ -1,16 +1,21 @@
 package com.upec.factoryscheduling.aps.solver;
 
+import com.upec.factoryscheduling.aps.entity.Procedure;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
+import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import lombok.extern.slf4j.Slf4j;
-
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.*;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.stream.Collectors;
 
 /**
  * 工厂调度约束提供器
@@ -40,23 +45,18 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
     @Override
     public Constraint[] defineConstraints(ConstraintFactory constraintFactory) {
         return new Constraint[]{
-                // 核心约束 - 必须严格遵守
-                workCenterConflict(constraintFactory),        // 工作中心时间冲突约束
-                procedureSequenceConstraint(constraintFactory), // 工序顺序约束
+                // 硬约束 - 必须满足
+                fixedStartTimeConstraint(constraintFactory),
+                workCenterConflict(constraintFactory),
+                procedureSequenceConstraint(constraintFactory),
+                workCenterMaintenanceConflict(constraintFactory),
                 
-                // 资源约束 - 处理资源可用性限制
-                workCenterMaintenanceConflict(constraintFactory), // 工作中心维护冲突约束
-                fixedStartTimeConstraint(constraintFactory), // 固定开始时间约束
-                
-                // 优化约束 - 提高解决方案质量
-                maximizeOrderPriority(constraintFactory),      // 订单优先级最大化约束
-                maximizeMachineUtilization(constraintFactory),  // 机器利用率最大化约束
-                minimizeMakespan(constraintFactory),           // 制造周期最小化约束
-                
-                // 分片相关约束 - 处理工序分片执行的特殊规则
-                procedureSliceSequence(constraintFactory),     // 工序分片顺序约束
-                procedureSlicePreferContinuous(constraintFactory), // 工序分片连续性偏好约束
-                orderStartDateProximity(constraintFactory)    // 订单开始时间接近度约束
+                // 软约束 - 尽量满足
+                orderStartDateProximity(constraintFactory),
+                maximizeOrderPriority(constraintFactory),
+                maximizeMachineUtilization(constraintFactory),
+                minimizeMakespan(constraintFactory),
+                procedureSliceSequence(constraintFactory)
         };
     }
     
@@ -71,26 +71,49 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      */
     private Constraint fixedStartTimeConstraint(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                // 跳过手动设置的时间槽，它们已经设置了固定的开始和结束时间
-                .filter(timeslot -> !timeslot.isManual())
-                .filter(timeslot -> timeslot.getStartTime() != null && timeslot.getProcedure() != null)
                 .filter(timeslot -> {
-                    // 检查工序是否已完成（endTime不为空），如果是则违反约束
-                    if (timeslot.getProcedure().getEndTime() != null) {
-                        return true; // 已完成的工序不应再被规划
+                    // 检查订单是否有固定开始时间
+                    if (timeslot.getOrder() != null && timeslot.getOrder().getFactStartDate() != null) {
+                        return true;
                     }
-                    // 检查Procedure的startTime是否不为空且与时间槽开始时间不同
-                    if (timeslot.getProcedure().getStartTime() != null &&
-                            !timeslot.getStartTime().equals(timeslot.getProcedure().getStartTime())) {
-                        return true; // 必须使用固定的开始时间
+                    // 检查工序是否有固定开始时间或已完成
+                    if (timeslot.getProcedure() != null) {
+                        return timeslot.getProcedure().getStartTime() != null 
+                                || timeslot.getProcedure().getEndTime() != null;
                     }
-                    // 检查Order的factStartDate是否不为空且与时间槽开始时间不同
-                    if (timeslot.getOrder() != null && timeslot.getOrder().getFactStartDate() != null &&
-                            !timeslot.getStartTime().equals(timeslot.getOrder().getFactStartDate())) {
-                        return true; // 必须使用订单的实际开始时间
-                    }
-                    return false; // 没有违反约束
-                }).penalize("Fixed start time violation", HardSoftScore.ONE_HARD);
+                    return false;
+                })
+                .penalize(HardSoftScore.ONE_HARD, timeslot -> {
+                            int penalty = 0;
+                            
+                            // 检查订单固定开始时间
+                            if (timeslot.getOrder() != null && timeslot.getOrder().getFactStartDate() != null 
+                                    && timeslot.getStartTime() != null) {
+                                LocalDateTime factStartDate = timeslot.getOrder().getFactStartDate();
+                                LocalDateTime plannedStartTime = timeslot.getStartTime();
+                                if (!factStartDate.equals(plannedStartTime)) {
+                                    penalty += 1;
+                                }
+                            }
+                            
+                            // 检查工序固定开始时间
+                            if (timeslot.getProcedure() != null && timeslot.getProcedure().getStartTime() != null 
+                                    && timeslot.getStartTime() != null) {
+                                LocalDateTime procedureStartTime = timeslot.getProcedure().getStartTime();
+                                LocalDateTime plannedStartTime = timeslot.getStartTime();
+                                if (!procedureStartTime.equals(plannedStartTime)) {
+                                    penalty += 1;
+                                }
+                            }
+                            
+                            // 检查工序是否已完成（不应再被规划）
+                            if (timeslot.getProcedure() != null && timeslot.getProcedure().getEndTime() != null) {
+                                penalty += 1; // 已完成的工序不应再被规划
+                            }
+                            
+                            return penalty;
+                        })
+                .asConstraint("Fixed start time constraint");
     }
     
     /**
@@ -100,28 +123,27 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      */
     private Constraint orderStartDateProximity(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                // 跳过手动设置的时间槽，它们不需要优化开始时间
-                .filter(timeslot -> !timeslot.isManual())
-                .filter(timeslot -> timeslot.getOrder() != null && timeslot.getStartTime() != null &&
-                        timeslot.getOrder().getPlanStartDate() != null && timeslot.getIndex() == 0)
-                .penalize("Order start date proximity", HardSoftScore.ofSoft(1),
-                        timeslot -> {
-                            // 计算时间槽开始时间与订单计划开始时间的差异（分钟）
-                            // 将LocalDate转换为LocalDateTime进行比较
-                            LocalDateTime planStartDateTime = LocalDateTime.of(
-                                    timeslot.getOrder().getPlanStartDate(),
-                                    LocalTime.MIN);
-                            long minutesDiff = ChronoUnit.MINUTES.between(
-                                    planStartDateTime,
-                                    timeslot.getStartTime());
-                            // 只惩罚比计划时间晚的情况，不惩罚提前开始
-                            return Math.max(0, (int)minutesDiff);
-                        });
+                .filter(timeslot -> timeslot.getOrder() != null 
+                        && timeslot.getOrder().getPlanStartDate() != null
+                        && timeslot.getStartTime() != null)
+                .penalize(HardSoftScore.ONE_SOFT, timeslot -> {
+                            LocalDate planStartDate = timeslot.getOrder().getPlanStartDate();
+                            LocalDateTime actualStartTime = timeslot.getStartTime();
+                            LocalDateTime planStartDateTime = planStartDate.atStartOfDay();
+                            
+                            // 计算与计划开始时间的偏差（分钟）
+                            long deviationMinutes = Math.abs(ChronoUnit.MINUTES.between(actualStartTime, planStartDateTime));
+                            
+                            // 每偏离一天增加1点惩罚
+                            return (int) (deviationMinutes / (24 * 60));
+                        })
+                .asConstraint("Order start date proximity");
     }
 
     /**
      * 工作中心冲突约束 - 硬约束
      * <p>确保同一工作中心在同一时间不能处理多个任务，防止资源冲突。</p>
+     * <p>通过timeslot中的workCenter来分配WorkCenterMaintenance</p>
      * <p><strong>实现逻辑：</strong></p>
      * <ol>
      *   <li>筛选出已分配工作中心和开始时间的时间槽</li>
@@ -134,21 +156,42 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      * @return 工作中心冲突约束对象
      */
     private Constraint workCenterConflict(ConstraintFactory constraintFactory) {
-        return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getWorkCenter() != null && timeslot.getStartTime() != null && timeslot.getEndTime() != null)
-                .join(Timeslot.class, 
+        return constraintFactory.forEachUniquePair(Timeslot.class,
                         Joiners.equal(Timeslot::getWorkCenter),
-                        Joiners.lessThan(Timeslot::getId), // 避免重复计数
-                        Joiners.filtering((a, b) -> {
-                            if (a.getStartTime() == null || b.getStartTime() == null || a.getEndTime() == null || b.getEndTime() == null) {
-                                return false;
+                        Joiners.overlapping(
+                                timeslot -> timeslot.getStartTime() != null ? timeslot.getStartTime() : LocalDateTime.MIN,
+                                timeslot -> timeslot.getEndTime() != null ? timeslot.getEndTime() : LocalDateTime.MAX))
+                .filter((timeslot1, timeslot2) -> {
+                    // 确保两个时间槽都有有效的工作中心和开始时间
+                    return timeslot1.getWorkCenter() != null && timeslot2.getWorkCenter() != null
+                            && timeslot1.getStartTime() != null && timeslot2.getStartTime() != null
+                            && !timeslot1.getId().equals(timeslot2.getId()); // 避免同一个时间槽
+                })
+                .penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
+                            // 计算重叠时间（分钟）
+                            LocalDateTime start1 = timeslot1.getStartTime();
+                            LocalDateTime end1 = timeslot1.getEndTime();
+                            LocalDateTime start2 = timeslot2.getStartTime();
+                            LocalDateTime end2 = timeslot2.getEndTime();
+                            
+                            if (end1 == null) {
+                                end1 = start1.plusMinutes(timeslot1.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
                             }
-                            // 检查时间重叠：如果两个时间区间有重叠，则存在冲突
-                            return !a.getEndTime().isBefore(b.getStartTime()) && !b.getEndTime().isBefore(a.getStartTime());
-                        }))
-                .penalize(HardSoftScore.ONE_HARD).asConstraint( "Work center conflict");
+                            if (end2 == null) {
+                                end2 = start2.plusMinutes(timeslot2.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                            }
+                            
+                            LocalDateTime overlapStart = start1.isAfter(start2) ? start1 : start2;
+                            LocalDateTime overlapEnd = end1.isBefore(end2) ? end1 : end2;
+                            
+                            if (overlapStart.isBefore(overlapEnd)) {
+                                return (int) ChronoUnit.MINUTES.between(overlapStart, overlapEnd);
+                            }
+                            return 0;
+                        })
+                .asConstraint("Work center conflict");
     }
-    
+
     /**
      * 工序顺序约束 - 硬约束
      * <p>确保有前后依赖关系的工序按正确顺序执行，防止工序执行顺序错误。</p>
@@ -164,31 +207,32 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      * @return 工序顺序约束对象
      */
     private Constraint procedureSequenceConstraint(ConstraintFactory constraintFactory) {
-        return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getProcedure() != null && 
-                        timeslot.getEndTime() != null && 
-                        timeslot.getIndex() != null &&
-                        timeslot.getTotal() != null &&
-                        timeslot.getIndex().equals(timeslot.getTotal() - 1) && // 只考虑最后一个分片
-                        timeslot.getProcedure().getNextProcedure() != null && !timeslot.getProcedure().getNextProcedure().isEmpty())
-                .join(Timeslot.class, 
-                        Joiners.filtering((prev, next) -> {
-                            if (prev.getProcedure() == null || next.getProcedure() == null || 
-                                next.getStartTime() == null || prev.getEndTime() == null || 
-                                next.getTotal() == null) {
-                                return false;
+        return constraintFactory.forEachUniquePair(Timeslot.class,
+                        Joiners.equal(timeslot -> timeslot.getProcedure().getTaskNo()),
+                        Joiners.equal(timeslot -> timeslot.getProcedure().getOrderNo()))
+                .filter((timeslot1, timeslot2) -> {
+                    // 确保两个时间槽都有有效的工序和开始时间
+                    return timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
+                            && timeslot1.getStartTime() != null && timeslot2.getStartTime() != null
+                            && timeslot1.getProcedure().getNextProcedure() != null
+                            && !timeslot1.getProcedure().getNextProcedure().isEmpty()
+                            && timeslot2.getProcedure().getId().equals(timeslot1.getProcedure().getNextProcedure());
+                })
+                .penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
+                            // 确保前置工序在后续工序之前完成
+                            LocalDateTime endTime1 = timeslot1.getEndTime();
+                            if (endTime1 == null) {
+                                endTime1 = timeslot1.getStartTime().plusMinutes(
+                                        timeslot1.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
                             }
-                            // 检查当前timeslot是否是后续工序的第一个分片
-                            boolean isFirstSliceOfNextProcedure = next.getIndex() == 0;
-                            // 检查next的procedure是否在prev的procedure的nextProcedure列表中
-                            boolean isNextProcedure = prev.getProcedure().getNextProcedure().stream()
-                                    .anyMatch(p -> p.getId().equals(next.getProcedure().getId()));
                             
-                            // 只有当这两个条件都满足时，才应用约束
-                            return isFirstSliceOfNextProcedure && isNextProcedure;
-                        }))
-                .filter((prev, next) -> next.getStartTime().isBefore(prev.getEndTime()))
-                .penalize(HardSoftScore.ONE_HARD)
+                            LocalDateTime startTime2 = timeslot2.getStartTime();
+                            
+                            if (endTime1.isAfter(startTime2)) {
+                                return (int) ChronoUnit.MINUTES.between(startTime2, endTime1);
+                            }
+                            return 0;
+                        })
                 .asConstraint("Procedure sequence constraint");
     }
     
@@ -208,36 +252,33 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      */
     private Constraint workCenterMaintenanceConflict(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getWorkCenter() != null && timeslot.getStartTime() != null && timeslot.getEndTime() != null)
-                .join(WorkCenterMaintenance.class, 
-                        Joiners.equal(Timeslot::getWorkCenter, WorkCenterMaintenance::getWorkCenter),
-                        Joiners.filtering((timeslot, maintenance) -> {
-                            if (timeslot.getStartTime() == null || timeslot.getEndTime() == null || 
-                                maintenance.getStartTime() == null || maintenance.getEndTime() == null ||
-                                timeslot.getStartTime().toLocalDate() != maintenance.getDate()) {
-                                return false;
+                .filter(timeslot -> timeslot.getWorkCenter() != null 
+                        && timeslot.getStartTime() != null
+                        && timeslot.getMaintenance() != null)
+                .join(WorkCenterMaintenance.class)
+                .filter((timeslot, maintenance) -> {
+                    // 检查工作中心状态是否为维护中（'n'表示不可用）
+                    return maintenance.getWorkCenter().getId().equals(timeslot.getWorkCenter().getId())
+                            && maintenance.getStatus() != null && maintenance.getStatus().equals("n");
+                })
+                .penalize(HardSoftScore.ONE_HARD, (Timeslot timeslot, WorkCenterMaintenance maintenance) -> {
+                            // 计算冲突时间
+                            LocalDateTime taskStart = timeslot.getStartTime();
+                            LocalDateTime taskEnd = timeslot.getEndTime();
+                            if (taskEnd == null) {
+                                taskEnd = taskStart.plusMinutes(timeslot.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
                             }
-                            // 状态为'n'表示维护中，不能安排工序
-                            if ("n".equals(maintenance.getStatus())) {
-                                return true; // 硬约束违反
+                            LocalDateTime maintenanceStart = LocalDateTime.of(maintenance.getDate(), 
+                                    maintenance.getStartTime() != null ? maintenance.getStartTime() : LocalTime.MIN);
+                            LocalDateTime maintenanceEnd = LocalDateTime.of(maintenance.getDate(),
+                                    maintenance.getEndTime() != null ? maintenance.getEndTime() : LocalTime.MAX);
+                            LocalDateTime overlapStart = taskStart.isAfter(maintenanceStart) ? taskStart : maintenanceStart;
+                            LocalDateTime overlapEnd = taskEnd.isBefore(maintenanceEnd) ? taskEnd : maintenanceEnd;
+                            if (overlapStart.isBefore(overlapEnd)) {
+                                return (int) ChronoUnit.MINUTES.between(overlapStart, overlapEnd);
                             }
-                            // 只有当状态为'y'或null时才检查时间范围
-                            if (!"y".equals(maintenance.getStatus()) && maintenance.getStatus() != null) {
-                                return false; // 其他状态不处理
-                            }
-                            // 将维护时间转换为与timeslot相同日期的LocalDateTime进行比较
-                            LocalDateTime maintenanceStartDateTime = LocalDateTime.of(
-                                    maintenance.getDate(), 
-                                    maintenance.getStartTime());
-                            LocalDateTime maintenanceEndDateTime = LocalDateTime.of(
-                                    maintenance.getDate(), 
-                                    maintenance.getEndTime());
-                            // 检查工序是否完全在允许工作的时间范围内
-                            // 如果工序开始时间早于维护允许时间，或结束时间晚于维护允许时间，则冲突
-                            return timeslot.getStartTime().isBefore(maintenanceStartDateTime) || 
-                                   timeslot.getEndTime().isAfter(maintenanceEndDateTime);
-                        }))
-                .penalize(HardSoftScore.ONE_HARD)
+                            return 0;
+                        })
                 .asConstraint("Work center maintenance conflict");
     }
     
@@ -257,16 +298,15 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      */
     private Constraint maximizeOrderPriority(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                // 跳过手动设置的时间槽，它们不需要优先级优化
-                .filter(timeslot -> !timeslot.isManual())
-                .filter(timeslot -> timeslot.getOrder() != null && timeslot.getStartTime() != null && 
-                        timeslot.getPriority() != null && timeslot.getPriority() <= 100)
-                .reward(HardSoftScore.ofSoft(10), // 权重较高，确保优先级得到重视
-                        // 奖励函数：将优先级数值转换为奖励值
-                        // 优先级数值越大，优先级越高，给予更高奖励
-                        // 公式：直接使用priority值，确保优先级100给予最大奖励
-                        // 优先级默认为0，确保即使没有设置优先级也能正常计算
-                        Timeslot::getPriority)
+                .filter(timeslot -> timeslot.getOrder() != null 
+                        && timeslot.getPriority() != null
+                        && timeslot.getStartTime() != null)
+                .reward(HardSoftScore.ONE_SOFT.multiply(10), // 使用较高权重确保优先级得到重视
+                        timeslot -> {
+                            Integer priority = timeslot.getPriority();
+                            // 优先级1（最高）给予100奖励，优先级10给予10奖励
+                            return Math.max(1, 110 - priority * 10);
+                        })
                 .asConstraint("Maximize order priority");
     }
     
@@ -286,45 +326,65 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      * @return 机器利用率最大化约束对象
      */
     private Constraint maximizeMachineUtilization(ConstraintFactory constraintFactory) {
-        // 首先，我们需要获取所有WorkCenterMaintenance记录，按工作中心和日期分组
-        // 然后，将这些信息与时间槽的分组信息结合，计算实际利用率
-        return constraintFactory.forEach(WorkCenterMaintenance.class)
-                .filter(maintenance -> maintenance.getWorkCenter() != null && maintenance.getDate() != null)
-                // 为每个维护记录，找到当天该工作中心的所有时间槽
-                .join(
-                        Timeslot.class,
-                        Joiners.equal(WorkCenterMaintenance::getWorkCenter, Timeslot::getWorkCenter),
-                        Joiners.equal(WorkCenterMaintenance::getDate, timeslot -> timeslot.getStartTime() != null ? timeslot.getStartTime().toLocalDate() : null)
-                )
-                // 使用filter而不是Joiners.filtering
-                .filter((maintenance, timeslot) -> timeslot.getStartTime() != null && timeslot.getWorkCenter() != null)
-                // 按工作中心和日期分组，计算总工作时间和获取工作容量
-                .groupBy(
-                        (maintenance, timeslot) -> maintenance.getWorkCenter(),
-                        (maintenance, timeslot) -> maintenance.getDate(),
-                        (maintenance, timeslot) -> maintenance.getCapacity(), // 工作中心当天的容量（分钟）
-                        ConstraintCollectors.sum((maintenance, timeslot) -> {
-                            // 显式类型转换避免类型推断问题
-                            Timeslot ts = (Timeslot) timeslot;
-                            return (int) (ts.getDuration().doubleValue() * 60);
-                        }) // 计算当天实际使用的分钟数
-                )
-                // 奖励函数：基于实际利用率给予奖励
-                .reward(HardSoftScore.ofSoft(1),
-                        (workCenter, date, capacity, usedMinutes) -> {
-                            // 确保容量为正数，避免除以零
-                            if (capacity > 0) {
-                                // 计算利用率百分比（0-100%），然后映射到奖励值
-                                // 使用平方根函数使得利用率越高，奖励增长越快
-                                double utilizationRate = Math.min(1.0, (double) usedMinutes / capacity);
-                                // 奖励值为容量乘以利用率的平方根，这样高利用率能获得更高的奖励
-                                return (int) (capacity * Math.sqrt(utilizationRate));
-                            }
-                            // 如果没有维护记录或容量为零，使用默认奖励
-                            return Math.min(480, usedMinutes); // 默认每天480分钟（8小时）
-                        }
-                )
-                .asConstraint("Maximize machine utilization");
+        return constraintFactory.forEach(Timeslot.class)
+                .filter(timeslot -> timeslot.getWorkCenter() != null 
+                        && timeslot.getStartTime() != null)
+                .join(WorkCenterMaintenance.class)
+                .filter((timeslot, maintenance) -> {
+                    // 确保工作中心可用且有容量信息
+                    return maintenance.getWorkCenter().getId().equals(timeslot.getWorkCenter().getId())
+                            && maintenance.getStatus() != null && maintenance.getStatus().equals("y")
+                            && maintenance.getCapacity().compareTo(BigDecimal.ZERO) > 0;
+                })
+                .groupBy((Timeslot timeslot, WorkCenterMaintenance maintenance) -> new WorkCenterUtilizationKey(
+                        timeslot.getWorkCenter().getId(),
+                        timeslot.getStartTime().toLocalDate(),
+                        maintenance.getCapacity()
+                ), ConstraintCollectors.sum((Timeslot timeslot, WorkCenterMaintenance maintenance) -> 
+                        timeslot.getDuration().multiply(BigDecimal.valueOf(60)).intValue() // 转换为分钟
+                ))
+                .reward(HardSoftScore.ONE_SOFT,
+                        (WorkCenterUtilizationKey key, Integer totalUsageMinutes) -> {
+                            // 计算利用率百分比，最高100%
+                            BigDecimal capacityMinutes = key.getCapacity().multiply(BigDecimal.valueOf(60));
+                            BigDecimal utilization = BigDecimal.valueOf(totalUsageMinutes)
+                                    .divide(capacityMinutes, 2, RoundingMode.HALF_UP)
+                                    .multiply(BigDecimal.valueOf(100))
+                                    .min(BigDecimal.valueOf(100)); // 上限100%
+                            
+                            return utilization.intValue();
+                        })
+                .asConstraint("Maximize machine utilization v2");
+    }
+    
+    // 辅助类，用于分组工作中心利用率数据
+    private static class WorkCenterUtilizationKey {
+        private final String workCenterId;
+        private final LocalDate date;
+        private final BigDecimal capacity;
+        
+        public WorkCenterUtilizationKey(String workCenterId, LocalDate date, BigDecimal capacity) {
+            this.workCenterId = workCenterId;
+            this.date = date;
+            this.capacity = capacity;
+        }
+        
+        public String getWorkCenterId() { return workCenterId; }
+        public LocalDate getDate() { return date; }
+        public BigDecimal getCapacity() { return capacity; }
+        
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            WorkCenterUtilizationKey that = (WorkCenterUtilizationKey) o;
+            return workCenterId.equals(that.workCenterId) && date.equals(that.date);
+        }
+        
+        @Override
+        public int hashCode() {
+            return workCenterId.hashCode() + date.hashCode();
+        }
     }
     
     /**
@@ -345,14 +405,22 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
     private Constraint minimizeMakespan(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
                 .filter(timeslot -> timeslot.getStartTime() != null)
-                // 惩罚函数：根据任务开始时间的延迟程度给予惩罚
-                .penalize(HardSoftScore.ONE_SOFT, timeslot -> {
-                    // 计算从当前时间到任务开始时间的分钟数
-                    long minutesFromNow = LocalDateTime.now().until(timeslot.getStartTime(), ChronoUnit.MINUTES);
-                    // 每30分钟的延迟增加1点惩罚
-                    // Math.max(0, ...)确保不会对过去时间给予奖励
-                    return (int) Math.max(0, minutesFromNow / 30);
-                })
+                .penalize(HardSoftScore.ONE_SOFT,
+                        timeslot -> {
+                            LocalDateTime now = LocalDateTime.now();
+                            LocalDateTime taskStartTime = timeslot.getStartTime();
+                            
+                            // 计算从当前时间到任务开始时间的分钟数
+                            long delayMinutes = ChronoUnit.MINUTES.between(now, taskStartTime);
+                            
+                            // 如果任务已经开始或为过去时间，不给予惩罚
+                            if (delayMinutes <= 0) {
+                                return 0;
+                            }
+                            
+                            // 每延迟30分钟增加1点惩罚
+                            return (int) (delayMinutes / 30);
+                        })
                 .asConstraint("Minimize makespan");
     }
     
@@ -367,39 +435,32 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      * 这些计划时间会根据规划实时动态变更
      */
     private Constraint procedureSliceSequence(ConstraintFactory constraintFactory) {
-        return constraintFactory.forEach(Timeslot.class)
-                // 跳过手动设置的时间槽，它们不需要参与规划
-                .filter(timeslot -> !timeslot.isManual())
-                .filter(timeslot -> timeslot.getProcedure() != null && timeslot.getStartTime() != null && timeslot.getEndTime() != null)
-                .filter(timeslot -> {
-                    // 检查分片是否在procedure的计划时间范围内
-                    boolean withinPlanTime = true;
-                    
-                    // 检查是否早于计划开始时间
-                    if (timeslot.getProcedure().getPlanStartDate() != null) {
-                        // 转换为相同类型进行比较
-                        LocalDateTime planStartDateTime = LocalDateTime.of(
-                                timeslot.getProcedure().getPlanStartDate(), 
-                                LocalTime.MIN);
-                        if (timeslot.getStartTime().isBefore(planStartDateTime)) {
-                            withinPlanTime = false;
-                        }
-                    }
-                    
-                    // 检查是否晚于计划结束时间
-                    if (timeslot.getProcedure().getPlanEndDate() != null) {
-                        // 转换为相同类型进行比较
-                        LocalDateTime planEndDateTime = LocalDateTime.of(
-                                timeslot.getProcedure().getPlanEndDate(), 
-                                LocalTime.MAX);
-                        if (timeslot.getEndTime().isAfter(planEndDateTime)) {
-                            withinPlanTime = false;
-                        }
-                    }
-                    
-                    return !withinPlanTime;
+        return constraintFactory.forEachUniquePair(Timeslot.class,
+                        Joiners.equal(timeslot -> timeslot.getProcedure().getId()),
+                        Joiners.lessThan(Timeslot::getId)) // 确保处理顺序
+                .filter((timeslot1, timeslot2) -> {
+                    // 确保两个时间槽属于同一工序且有有效的开始时间
+                    return timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
+                            && timeslot1.getStartTime() != null && timeslot2.getStartTime() != null
+                            && timeslot1.getProcedure().getId().equals(timeslot2.getProcedure().getId());
                 })
-                .penalize("Procedure slice time range", HardSoftScore.ONE_HARD);
+                .penalize(HardSoftScore.ONE_HARD,
+                        (timeslot1, timeslot2) -> {
+                            // 确保分片按顺序执行：timeslot1在timeslot2之前完成
+                            LocalDateTime endTime1 = timeslot1.getEndTime();
+                            if (endTime1 == null) {
+                                endTime1 = timeslot1.getStartTime().plusMinutes(
+                                        timeslot1.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                            }
+                            
+                            LocalDateTime startTime2 = timeslot2.getStartTime();
+                            
+                            if (endTime1.isAfter(startTime2)) {
+                                return (int) ChronoUnit.MINUTES.between(startTime2, endTime1);
+                            }
+                            return 0;
+                        })
+                .asConstraint("Procedure slice sequence");
     }
 
     /**
@@ -407,22 +468,31 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      * 优先让同一工序的分片连续执行，减少时间间隔
      */
     private Constraint procedureSlicePreferContinuous(ConstraintFactory constraintFactory) {
-        return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getIndex() != null && timeslot.getIndex() > 0 &&
-                                   timeslot.getIndex() != null && timeslot.getIndex() > 1 &&
-                                   timeslot.getStartTime() != null && timeslot.getProcedure() != null)
-                .join(Timeslot.class,
-                        Joiners.equal(t -> t.getProcedure() != null ? t.getProcedure().getId() : null, 
-                                     t -> t.getProcedure() != null ? t.getProcedure().getId() : null),
-                        Joiners.equal(t -> t.getIndex() != null ? t.getIndex() - 1 : -1, Timeslot::getIndex))
-                .filter((current, previous) -> previous.getEndTime() != null && current.getStartTime() != null && 
-                                               !current.getStartTime().equals(previous.getEndTime()))
-                .penalize("Procedure slice prefer continuous", HardSoftScore.ONE_SOFT, (current, previous) -> {
-                    if (previous.getEndTime() != null && current.getStartTime() != null) {
-                        long gapMinutes = ChronoUnit.MINUTES.between(previous.getEndTime(), current.getStartTime());
-                        return Math.max(0, (int)(gapMinutes / 30)); // 每30分钟一个惩罚点，转换为int类型
-                    }
-                    return 0;
-                });
+        return constraintFactory.forEachUniquePair(Timeslot.class,
+                        Joiners.equal(timeslot -> timeslot.getProcedure().getId()),
+                        Joiners.lessThan(Timeslot::getId)) // 确保处理顺序
+                .filter((timeslot1, timeslot2) -> {
+                    // 确保两个时间槽属于同一工序且有有效的开始时间
+                    return timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
+                            && timeslot1.getStartTime() != null && timeslot2.getStartTime() != null
+                            && timeslot1.getProcedure().getId().equals(timeslot2.getProcedure().getId());
+                }).penalize(HardSoftScore.ONE_SOFT,
+                        (timeslot1, timeslot2) -> {
+                            // 计算两个分片之间的时间间隔
+                            LocalDateTime endTime1 = timeslot1.getEndTime();
+                            if (endTime1 == null) {
+                                endTime1 = timeslot1.getStartTime().plusMinutes(
+                                        timeslot1.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                            }
+                            
+                            LocalDateTime startTime2 = timeslot2.getStartTime();
+                            
+                            if (endTime1.isBefore(startTime2)) {
+                                // 计算时间间隔（分钟），间隔越大惩罚越大
+                                return (int) ChronoUnit.MINUTES.between(endTime1, startTime2);
+                            }
+                            return 0;
+                        })
+                .asConstraint("Procedure slice prefer continuous");
     }
 }

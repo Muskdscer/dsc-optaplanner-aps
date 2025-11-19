@@ -232,8 +232,7 @@ public class SchedulingService {
                 .max(LocalDate::compareTo)
                 .orElse(LocalDate.now());
         
-        // 生成时间槽范围列表（每小时一个时间点）
-        List<LocalDateTime> timeslotRange = generateTimeslotRange(start, end);
+        // 不再使用时间槽范围列表，startTime将通过maintenance自动计算
         
         // 获取工作中心列表
         List<WorkCenter> workCenters = new ArrayList<>();
@@ -257,37 +256,30 @@ public class SchedulingService {
         }
         
         // 使用正确的构造函数创建解决方案实例
-        // 参数依次为：时间槽列表、工作中心列表、时间槽范围、维护计划列表
-        return new FactorySchedulingSolution(timeslots, timeslotRange, maintenances);
+        // 参数依次为：时间槽列表、工作中心列表、维护计划列表
+        FactorySchedulingSolution solution = new FactorySchedulingSolution(timeslots, maintenances);
+        
+        // 构建按WorkCenter分组的维护计划映射，用于优化搜索空间
+        solution.buildWorkCenterMaintenanceMap();
+        
+        // 为每个Timeslot设置个性化的维护计划取值范围，减少搜索空间
+        if (solution.getTimeslots() != null && !solution.getTimeslots().isEmpty()) {
+            for (Timeslot timeslot : solution.getTimeslots()) {
+                if (timeslot.getWorkCenter() != null) {
+                    // 获取与当前Timeslot的WorkCenter匹配的维护计划
+                    List<WorkCenterMaintenance> availableMaintenances = solution.getMaintenancesByWorkCenter(timeslot.getWorkCenter());
+                    timeslot.setAvailableMaintenances(availableMaintenances);
+                    
+                    log.debug("Timeslot {} (WorkCenter: {}) has {} available maintenances", 
+                             timeslot.getId(), timeslot.getWorkCenter().getName(), availableMaintenances.size());
+                }
+            }
+        }
+        
+        return solution;
     }
     
-    /**
-     * 生成时间槽范围列表
-     * 从开始日期到结束日期，每小时生成一个时间点
-     * 
-     * @param start 开始日期
-     * @param end 结束日期
-     * @return 时间点列表
-     */
-    private List<LocalDateTime> generateTimeslotRange(LocalDate start, LocalDate end) {
-        List<LocalDateTime> timeslots = new ArrayList<>();
-        
-        // 确保结束日期至少为开始日期
-        if (end.isBefore(start)) {
-            end = start;
-        }
-        
-        // 从开始日期的0点开始，每小时生成一个时间点
-        LocalDateTime current = start.atStartOfDay();
-        LocalDateTime endTime = end.plusDays(1).atStartOfDay(); // 包含结束日期的全天
-        
-        while (current.isBefore(endTime)) {
-            timeslots.add(current);
-            current = current.plusHours(1);
-        }
-        
-        return timeslots;
-    }
+
     
     /**
      * 加载包含工序分片的问题数据
@@ -535,9 +527,8 @@ public class SchedulingService {
         if (maintenanceService != null) {
             maintenances = maintenanceService.getAllMaintenances();
         }
-        
         // 使用正确的构造函数创建解决方案实例
-        return new FactorySchedulingSolution(timeslots, new ArrayList<>(), maintenances);
+        return new FactorySchedulingSolution(timeslots, maintenances);
     }
 
     /**
@@ -655,7 +646,7 @@ public class SchedulingService {
                     maintenance);
             
             // 检查是否超出设备容量
-            if (countDailyHours > maintenance.getCapacity()) {
+            if (BigDecimal.valueOf(countDailyHours).compareTo(maintenance.getCapacity()) > 0) {
                 validateSolution.setMessage("超出当日机器容量!");
             }
             

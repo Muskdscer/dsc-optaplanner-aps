@@ -97,9 +97,9 @@ public class WorkCenterMaintenanceService {
         // 为未来30天每天创建维护计划
         for (int i = 1; i <= 30; i++) {
             // 创建维护计划对象，持续时间为480分钟（8小时）
-            WorkCenterMaintenance maintenance = new WorkCenterMaintenance(machine, now.plusDays(i), 480, null);
+            WorkCenterMaintenance maintenance = new WorkCenterMaintenance(machine, now.plusDays(i), java.math.BigDecimal.valueOf(480), null);
             maintenance.setStartTime(LocalTime.of(9, 0)); // 上午9点开始
-            maintenance.setEndTime(maintenance.getStartTime().plusMinutes(maintenance.getCapacity())); // 计算结束时间
+            maintenance.setEndTime(maintenance.getStartTime().plusMinutes(maintenance.getCapacity().longValue())); // 计算结束时间
             maintenances.add(maintenance);
         }
 
@@ -174,8 +174,8 @@ public class WorkCenterMaintenanceService {
             }
             // 计算容量（持续时间）
             assert maintenance.getEndTime() != null;
-            workCenterMaintenance
-                    .setCapacity(maintenance.getEndTime().getMinute() - maintenance.getStartTime().getMinute());
+            long durationMinutes = java.time.Duration.between(maintenance.getStartTime(), maintenance.getEndTime()).toMinutes();
+            workCenterMaintenance.setCapacity(java.math.BigDecimal.valueOf(durationMinutes));
 
             return workCenterMaintenance;
         }).filter(Objects::nonNull) // 过滤掉null值（不存在的记录）

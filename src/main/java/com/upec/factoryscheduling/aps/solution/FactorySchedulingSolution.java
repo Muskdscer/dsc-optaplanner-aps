@@ -5,6 +5,7 @@ import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.entity.ValidateSolution;
 import com.upec.factoryscheduling.aps.entity.WorkCenter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import org.optaplanner.core.api.domain.solution.PlanningEntityCollectionProperty;
 import org.optaplanner.core.api.domain.solution.PlanningScore;
@@ -14,8 +15,16 @@ import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolverStatus;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 工厂调度规划解决方案类
@@ -36,23 +45,53 @@ public class FactorySchedulingSolution {
     @PlanningEntityCollectionProperty  // 标记这是规划实体的集合，OptaPlanner将优化这些实体的规划变量
     private List<Timeslot> timeslots;
 
-    /**
-     * 时间范围 - 可用的时间点列表
-     * <p>为规划变量提供可能的开始时间值范围</p>
-     */
-    @ValueRangeProvider(id = "timeslotRange")  // 提供时间点的取值范围，供规划变量选择
-    @ProblemFactCollectionProperty  // 标记这是问题事实（约束条件）
-    @JsonIgnore  // JSON序列化时忽略此字段
-    private List<LocalDateTime> timeslotRange;
+
 
     /**
      * 设备维护计划列表 - 影响工作中心可用性的约束条件和规划变量取值范围
      * <p>在维护期间，对应的工作中心不可用</p>
      */
-    @ValueRangeProvider(id = "maintenanceRange")  // 提供维护计划的取值范围，供规划变量选择
-    @ProblemFactCollectionProperty  // 标记这是问题事实（约束条件）
+    @PlanningEntityCollectionProperty  // 标记这是规划实体（因为WorkCenterMaintenance现在是规划实体）
     @JsonIgnore  // JSON序列化时忽略此字段
     private List<WorkCenterMaintenance> maintenances;
+
+    /**
+     * 获取指定工作中心的维护计划列表
+     * 用于Timeslot的预匹配优化，减少搜索空间
+     * @param workCenter 工作中心
+     * @return 该工作中心的维护计划列表
+     */
+    public List<WorkCenterMaintenance> getMaintenancesByWorkCenter(WorkCenter workCenter) {
+        if (maintenanceMap == null) {
+            buildWorkCenterMaintenanceMap();
+        }
+        return maintenanceMap.getOrDefault(workCenter, new ArrayList<>());
+    }
+
+    /**
+     * 构建按WorkCenter分组的维护计划映射
+     * 在规划开始前调用，优化搜索性能
+     */
+    public void buildWorkCenterMaintenanceMap() {
+        maintenanceMap = new HashMap<>();
+        if (maintenances != null) {
+            for (WorkCenterMaintenance maintenance : maintenances) {
+                WorkCenter workCenter = maintenance.getWorkCenter();
+                if (workCenter != null) {
+                    maintenanceMap.computeIfAbsent(workCenter, k -> new ArrayList<>())
+                            .add(maintenance);
+                }
+            }
+        }
+    }
+
+    /**
+     * 按WorkCenter分组的维护计划映射，用于优化搜索空间
+     * Key: WorkCenter, Value: 该工作中心的维护计划列表
+     * 注意：此字段不参与JSON序列化，仅在运行时用于性能优化
+     */
+    @JsonIgnore
+    private Map<WorkCenter, List<WorkCenterMaintenance>> maintenanceMap;
     /**
      * 规划分数 - 评估解决方案质量的指标
      * <p>使用HardSoftScore类型，包含硬约束和软约束的违反情况：
@@ -80,14 +119,11 @@ public class FactorySchedulingSolution {
      * 创建工厂调度解决方案的构造函数（含维护计划）
      *
      * @param timeslots     需要安排的时间槽（工序）列表
-     * @param timeslotRange 可用的时间范围列表
      * @param maintenances  工作中心维护计划列表
      */
     public FactorySchedulingSolution(List<Timeslot> timeslots,
-                                     List<LocalDateTime> timeslotRange,
                                      List<WorkCenterMaintenance> maintenances) {
         this.timeslots = timeslots;
-        this.timeslotRange = timeslotRange;
         this.maintenances = maintenances;
     }
 }

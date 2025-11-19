@@ -183,13 +183,13 @@ public class MesOrderService {
         for (ApsWorkCenterMaintenance apsWorkCenterMaintenance : apsWorkCenterMaintenances) {
             WorkCenterMaintenance maintenance = new WorkCenterMaintenance();
             maintenance.setYear(DateUtils.parseLocalDate(apsWorkCenterMaintenance.getLocalDate()).getYear());
-            maintenance.setCapacity(apsWorkCenterMaintenance.getCapacity().intValue());
+            maintenance.setCapacity(java.math.BigDecimal.valueOf(apsWorkCenterMaintenance.getCapacity()));
             maintenance.setDate(DateUtils.parseLocalDate(apsWorkCenterMaintenance.getLocalDate()));
             maintenance.setWorkCenter(workCenterMap.get(apsWorkCenterMaintenance.getWorkCenterCode()));
             maintenance.setStartTime(DateUtils.parseDateTime(apsWorkCenterMaintenance.getStartTime()).toLocalTime());
             maintenance.setEndTime(DateUtils.parseDateTime(apsWorkCenterMaintenance.getEndTime()).toLocalTime());
             maintenance.setStatus(apsWorkCenterMaintenance.getStatus());
-            maintenance.setId(RandomFun.getInstance().getRandom());
+            maintenance.setId(RandomFun.getInstance().getRandom().toString());
             maintenances.add(maintenance);
         }
         return workCenterMaintenanceService.createMachineMaintenance(maintenances);
