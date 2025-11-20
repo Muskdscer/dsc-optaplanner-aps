@@ -1,8 +1,9 @@
 package com.upec.factoryscheduling.mes.entity;
 
-import org.hibernate.annotations.GenericGenerator;
-
-import javax.persistence.*;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.Id;
+import javax.persistence.Table;
 @Entity
 @Table(name = "APS_MACHINE_MAINTENANCE")
 public class ApsWorkCenterMaintenance {

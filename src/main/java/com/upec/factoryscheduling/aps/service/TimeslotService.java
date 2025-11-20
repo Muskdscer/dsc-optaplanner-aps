@@ -1,24 +1,20 @@
 package com.upec.factoryscheduling.aps.service;
 
-import com.upec.factoryscheduling.aps.entity.*;
+import com.upec.factoryscheduling.aps.entity.Order;
+import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.repository.TimeslotRepository;
 import com.upec.factoryscheduling.aps.resquest.ProcedureRequest;
-import com.upec.factoryscheduling.aps.resquest.TimeslotRequest;
 import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
-import io.micrometer.core.instrument.util.TimeUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.kie.api.task.TaskService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
-
 import java.math.BigDecimal;
-import java.nio.Buffer;
-import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Service

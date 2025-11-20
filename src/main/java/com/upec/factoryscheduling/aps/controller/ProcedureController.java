@@ -3,8 +3,8 @@ package com.upec.factoryscheduling.aps.controller;
 import com.upec.factoryscheduling.aps.entity.Procedure;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.service.ProcedureService;
-import org.springframework.beans.factory.annotation.Autowired;
 import com.upec.factoryscheduling.common.utils.ApiResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;

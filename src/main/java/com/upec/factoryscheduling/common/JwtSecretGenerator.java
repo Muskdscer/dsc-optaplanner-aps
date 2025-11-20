@@ -1,6 +1,7 @@
 package com.upec.factoryscheduling.common;
 
 import io.jsonwebtoken.security.Keys;
+
 import javax.crypto.SecretKey;
 import java.util.Base64;
 

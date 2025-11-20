@@ -3,17 +3,12 @@ package com.upec.factoryscheduling.aps.solution;
 import com.upec.factoryscheduling.aps.entity.Procedure;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.util.CollectionUtils;
-import org.optaplanner.core.api.score.director.ScoreDirector;
 import org.optaplanner.core.api.domain.variable.VariableListener;
+import org.optaplanner.core.api.score.director.ScoreDirector;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 @Slf4j
 public class TimeslotVariableListener implements VariableListener<FactorySchedulingSolution, Timeslot> {

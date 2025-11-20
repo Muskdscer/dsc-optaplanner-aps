@@ -3,14 +3,13 @@ package com.upec.factoryscheduling.aps.entity;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
+import org.optaplanner.core.api.domain.entity.PlanningEntity;
 import org.optaplanner.core.api.domain.lookup.PlanningId;
 
 import javax.persistence.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import org.optaplanner.core.api.domain.entity.PlanningEntity;
 
 @Entity
 @Table(name = "work_center_maintenance")

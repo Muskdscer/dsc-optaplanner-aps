@@ -6,9 +6,7 @@ import org.optaplanner.core.api.domain.variable.VariableListener;
 import org.optaplanner.core.api.score.director.ScoreDirector;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 /**
  * 工作中心维护计划变量监听器

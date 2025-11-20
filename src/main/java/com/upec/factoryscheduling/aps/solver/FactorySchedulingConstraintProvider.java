@@ -1,9 +1,7 @@
 package com.upec.factoryscheduling.aps.solver;
 
-import com.upec.factoryscheduling.aps.entity.Procedure;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
-import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.*;
@@ -15,7 +13,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-import java.util.stream.Collectors;
 
 /**
  * 工厂调度约束提供器
@@ -212,11 +209,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                         Joiners.equal(timeslot -> timeslot.getProcedure().getOrderNo()))
                 .filter((timeslot1, timeslot2) -> {
                     // 确保两个时间槽都有有效的工序和开始时间
-                    return timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
-                            && timeslot1.getStartTime() != null && timeslot2.getStartTime() != null
-                            && timeslot1.getProcedure().getNextProcedure() != null
-                            && !timeslot1.getProcedure().getNextProcedure().isEmpty()
-                            && timeslot2.getProcedure().getId().equals(timeslot1.getProcedure().getNextProcedure());
+                    return false;
                 })
                 .penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
                             // 确保前置工序在后续工序之前完成
@@ -354,7 +347,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                             
                             return utilization.intValue();
                         })
-                .asConstraint("Maximize machine utilization v2");
+                .asConstraint("Maximize machine utilization");
     }
     
     // 辅助类，用于分组工作中心利用率数据

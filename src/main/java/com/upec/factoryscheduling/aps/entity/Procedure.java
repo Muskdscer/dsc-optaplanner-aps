@@ -1,17 +1,15 @@
 package com.upec.factoryscheduling.aps.entity;
 
+import com.upec.factoryscheduling.aps.solution.ProcedureVariableListener;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.GenericGenerator;
 
 import javax.persistence.*;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-
-import com.upec.factoryscheduling.aps.solution.ProcedureVariableListener;
 
 @Data
 @Getter

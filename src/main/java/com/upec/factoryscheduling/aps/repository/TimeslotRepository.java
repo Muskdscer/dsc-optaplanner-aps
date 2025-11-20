@@ -1,10 +1,7 @@
 package com.upec.factoryscheduling.aps.repository;
 
 import com.upec.factoryscheduling.aps.entity.Order;
-import com.upec.factoryscheduling.aps.entity.Procedure;
-import com.upec.factoryscheduling.aps.entity.Task;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

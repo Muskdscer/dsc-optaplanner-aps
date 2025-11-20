@@ -1,30 +1,20 @@
 package com.upec.factoryscheduling.aps.solution;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
-import com.upec.factoryscheduling.aps.entity.ValidateSolution;
 import com.upec.factoryscheduling.aps.entity.WorkCenter;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
 import lombok.Data;
 import org.optaplanner.core.api.domain.solution.PlanningEntityCollectionProperty;
 import org.optaplanner.core.api.domain.solution.PlanningScore;
 import org.optaplanner.core.api.domain.solution.PlanningSolution;
-import org.optaplanner.core.api.domain.solution.ProblemFactCollectionProperty;
-import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolverStatus;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * 工厂调度规划解决方案类

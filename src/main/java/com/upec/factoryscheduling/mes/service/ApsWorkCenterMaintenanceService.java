@@ -1,9 +1,9 @@
 package com.upec.factoryscheduling.mes.service;
 
+import com.upec.factoryscheduling.common.utils.RandomFun;
 import com.upec.factoryscheduling.mes.entity.ApsWorkCenterMaintenance;
 import com.upec.factoryscheduling.mes.entity.MesBaseWorkCenter;
 import com.upec.factoryscheduling.mes.repository.ApsWorkCenterMaintenanceRepository;
-import com.upec.factoryscheduling.common.utils.RandomFun;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

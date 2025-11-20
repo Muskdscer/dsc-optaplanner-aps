@@ -1,10 +1,10 @@
 package com.upec.factoryscheduling.auth.service;
 
-import com.upec.factoryscheduling.auth.repository.UserRepository;
 import com.upec.factoryscheduling.auth.dto.LoginRequest;
 import com.upec.factoryscheduling.auth.dto.LoginResponse;
 import com.upec.factoryscheduling.auth.dto.RegisterRequest;
 import com.upec.factoryscheduling.auth.entity.User;
+import com.upec.factoryscheduling.auth.repository.UserRepository;
 import com.upec.factoryscheduling.auth.utils.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
