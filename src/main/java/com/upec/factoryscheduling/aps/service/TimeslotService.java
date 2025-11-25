@@ -8,13 +8,16 @@ import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -92,9 +95,9 @@ public class TimeslotService {
         return timeslotRepository.saveAll(timeslots);
     }
 
-
     public List<Timeslot> findAllByOrderIn(List<Order> orders) {
-        return timeslotRepository.findAllByOrderIn(orders);
+        Sort sort = Sort.by(Sort.Direction.DESC, "order", "procedureIndex", "index").ascending();
+        return timeslotRepository.findAllByOrderIn(orders, sort);
     }
 
 
@@ -116,7 +119,7 @@ public class TimeslotService {
             if (timeslot.getStartTime() != null && timeslot.getEndTime() != null) {
                 continue;
             }
-            if (time >= 0.5&&slice<=1) {
+            if (time >= 0.5 && slice <= 1) {
                 timeslotRepository.saveAll(splitTimeslot(timeslot, time));
             }
             if (slice > 1) {
@@ -134,14 +137,14 @@ public class TimeslotService {
             return timeslots;
         }
         duration = duration - time;
-        timeslot.setDuration(new BigDecimal(Double.toString(time)));
+        timeslot.setDuration(time);
         timeslots.add(timeslot);
         while (duration > 0) {
             Timeslot newTimeslot = new Timeslot();
             BeanUtils.copyProperties(timeslot, newTimeslot);
             index++;
             newTimeslot.setId(timeslot.getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
-            newTimeslot.setDuration(new BigDecimal(Double.toString(Math.min(duration, time))));
+            newTimeslot.setDuration(Math.min(duration, time));
             newTimeslot.setIndex(index);
             timeslots.add(newTimeslot);
             duration = duration - time;
@@ -155,7 +158,7 @@ public class TimeslotService {
         double duration = timeslot.getProcedure().getMachineHours();
         int index = timeslot.getIndex();
         double interval = Math.round(duration / slice * 100) / 100.00;
-        timeslot.setDuration(new BigDecimal(Double.toString(interval)));
+        timeslot.setDuration(interval);
         timeslots.add(timeslot);
         for (int i = 1; i < slice; i++) {
             Timeslot newTimeslot = new Timeslot();
@@ -163,7 +166,7 @@ public class TimeslotService {
             index++;
             newTimeslot.setId(timeslot.getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
             newTimeslot.setIndex(index);
-            newTimeslot.setDuration(new BigDecimal(Double.toString(Math.min(duration - (interval * i), interval))));
+            newTimeslot.setDuration(Math.min(duration - (interval * i), interval));
             timeslots.add(newTimeslot);
         }
         int total = timeslots.size();

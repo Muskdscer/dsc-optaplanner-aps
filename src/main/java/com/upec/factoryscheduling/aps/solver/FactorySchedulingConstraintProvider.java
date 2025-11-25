@@ -9,8 +9,6 @@ import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.*;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -46,9 +44,157 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
     public Constraint[] defineConstraints(ConstraintFactory constraintFactory) {
         return new Constraint[]{
                 // 硬约束 - 必须满足
-                procedureSequenceConstraint(constraintFactory)
+                workCenterMaintenanceAllocationConstraint(constraintFactory),
+                procedureSequenceConstraint(constraintFactory),
+                timeslotIndexOrderConstraint(constraintFactory)
         };
     }
+
+
+
+    /**
+     * 工作中心维护分配约束 - 硬约束
+     * <p>确保时间槽分配的工作中心维护计划与工作中心匹配，防止错误分配维护计划。</p>
+     * <p><strong>约束条件：</strong></p>
+     * <ul>
+     *   <li>timeslot.getWorkCenter().getId().equals(maintenance.getWorkCenter().getId())</li>
+     * </ul>
+     * <p>当时间槽被分配了维护计划时，必须确保维护计划对应的工作中心与时间槽的工作中心一致。</p>
+     *
+     * @param constraintFactory 约束工厂
+     * @return 工作中心维护分配约束对象
+     **/
+    /**
+     * 工作中心维护计划分配约束
+     * 确保Timeslot只能分配给具有相同workCenter Id的WorkCenterMaintenance，并且当workCenter为空时不能分配maintenance
+     */
+    private Constraint workCenterMaintenanceAllocationConstraint(ConstraintFactory factory) {
+        return factory.forEach(Timeslot.class)
+                .filter(timeslot -> timeslot.getMaintenance() != null)
+                .filter(timeslot -> {
+                    // 当workCenter为空时违反约束
+                    if (timeslot.getWorkCenter() == null) {
+                        return true;
+                    }
+                    // 当工作中心ID不匹配时违反约束
+                    return timeslot.getMaintenance().getWorkCenter() != null &&
+                            !timeslot.getWorkCenter().getId().equals(timeslot.getMaintenance().getWorkCenter().getId());
+                })
+                // 违反约束时施加硬约束惩罚
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("Work Center Maintenance Allocation Constraint");
+    }
+
+    /**
+     * 工序分片索引顺序约束（硬约束）
+     * 确保隶属同一个工序的时间槽时间顺序必须按照时间槽索引确定开始时间顺序
+     * 索引较小的时间槽的开始时间必须早于索引较大的时间槽
+     */
+    private Constraint timeslotIndexOrderConstraint(ConstraintFactory constraintFactory) {
+        return constraintFactory.forEachUniquePair(Timeslot.class,
+                        // 确保两个时间槽属于同一工序
+                        Joiners.equal(timeslot -> timeslot.getProcedure() != null ? timeslot.getProcedure().getId() : null),
+                        // 只比较不同的时间槽
+                        Joiners.filtering((timeslot1, timeslot2) -> {
+                            // 确保两个时间槽都有关联的工序和有效的索引
+                            return timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
+                                    && timeslot1.getIndex() != null && timeslot2.getIndex() != null
+                                    // 确保索引不同，避免比较同一个时间槽或索引相同的时间槽
+                                    && !timeslot1.getIndex().equals(timeslot2.getIndex())
+                                    // 确保两个时间槽都有有效的开始时间
+                                    && timeslot1.getStartTime() != null && timeslot2.getStartTime() != null;
+                        }))
+                .filter((timeslot1, timeslot2) -> {
+                    // 索引较小的时间槽的开始时间不应晚于索引较大的时间槽的开始时间
+                    Integer index1 = timeslot1.getIndex();
+                    Integer index2 = timeslot2.getIndex();
+                    LocalDateTime startTime1 = timeslot1.getStartTime();
+                    LocalDateTime startTime2 = timeslot2.getStartTime();
+                    
+                    // 如果索引较小的时间槽开始时间反而晚，违反约束
+                    return (index1 < index2 && startTime1.isAfter(startTime2)) ||
+                           (index1 > index2 && startTime1.isBefore(startTime2));
+                })
+                .penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
+                    // 计算违反约束的时间偏差（分钟）
+                    LocalDateTime startTime1 = timeslot1.getStartTime();
+                    LocalDateTime startTime2 = timeslot2.getStartTime();
+                    LocalDateTime earlierTime = startTime1.isBefore(startTime2) ? startTime1 : startTime2;
+                    LocalDateTime laterTime = startTime1.isBefore(startTime2) ? startTime2 : startTime1;
+                    
+                    return (int) ChronoUnit.MINUTES.between(earlierTime, laterTime);
+                })
+                .asConstraint("Timeslot index order constraint");
+    }
+
+    /**
+     * 工序顺序约束 - 硬约束
+     * <p>确保有前后依赖关系的工序按正确顺序执行，防止工序执行顺序错误。</p>
+     * <p><strong>实现逻辑：</strong></p>
+     * <ol>
+     *   <li>筛选出已分配工序且有后续工序的时间槽（仅最后一个分片）</li>
+     *   <li>利用Procedure的nextProcedure链表结构连接前序和后续工序</li>
+     *   <li>检查后续工序是否在前置工序完成前开始</li>
+     *   <li>对违反顺序的情况应用硬约束惩罚</li>
+     * </ol>
+     *
+     * @param constraintFactory 约束工厂
+     * @return 工序顺序约束对象
+     */
+    /**
+     * 工序顺序约束（硬约束）
+     * <p>确保：</p>
+     * <ul>
+     *   <li>同一个订单的不同工序必须按照顺序执行</li>
+     *   <li>前置工序必须在后续工序之前完成</li>
+     *   <li>支持并行工序：当nextProcedure的size大于1时，这些工序可以并行执行</li>
+     * </ul>
+     */
+    private Constraint procedureSequenceConstraint(ConstraintFactory constraintFactory) {
+        return constraintFactory.forEachUniquePair(Timeslot.class,
+                Joiners.equal(timeslot -> timeslot.getProcedure() != null ? timeslot.getProcedure().getOrderNo() : null)
+        ).filter((timeslot1, timeslot2) -> {
+            // 确保两个时间槽都有有效的工序和开始时间
+            if (timeslot1.getProcedure() == null || timeslot2.getProcedure() == null) {
+                return false;
+            }
+            if (timeslot1.getStartTime() == null || timeslot2.getStartTime() == null) {
+                return false;
+            }
+            // 检查t2是否是t1的后续工序
+            return isNextProcedure(timeslot1.getProcedure(), timeslot2.getProcedure());
+        }).penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
+            // 确保前置工序在后续工序之前完成
+            // 这里不使用plusDays(1)，因为工序可能在同一天完成和开始
+            LocalDateTime endTime1 = timeslot1.getStartTime(); // 简化处理，实际可能需要根据工序时长计算结束时间
+            LocalDateTime startTime2 = timeslot2.getStartTime();
+            if (endTime1.isAfter(startTime2)) {
+                // 计算违反约束的时间量（分钟）作为惩罚值
+                return (int) ChronoUnit.MINUTES.between(startTime2, endTime1);
+            }
+            return 0;
+        }).asConstraint("Procedure sequence constraint");
+    }
+
+    /**
+     * 检查procedure2是否是procedure1的后续工序
+     */
+    private boolean isNextProcedure(Procedure procedure1, Procedure procedure2) {
+        // 获取procedure1的所有后续工序
+        List<Procedure> nextProcedures = procedure1.getNextProcedure();
+        if (nextProcedures == null || nextProcedures.isEmpty()) {
+            return false;
+        }
+        
+        // 检查procedure2是否在procedure1的后续工序列表中
+        for (Procedure nextProcedure : nextProcedures) {
+            if (procedure2.getId().equals(nextProcedure.getId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     /**
      * 固定开始时间约束（硬约束）
@@ -164,14 +310,12 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     LocalDateTime end1 = timeslot1.getEndTime();
                     LocalDateTime start2 = timeslot2.getStartTime();
                     LocalDateTime end2 = timeslot2.getEndTime();
-
                     if (end1 == null) {
-                        end1 = start1.plusMinutes(timeslot1.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                        end1 = start1.plusMinutes((long) (timeslot1.getDuration() * 60));
                     }
                     if (end2 == null) {
-                        end2 = start2.plusMinutes(timeslot2.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                        end2 = start2.plusMinutes((long) (timeslot2.getDuration() * 60));
                     }
-
                     LocalDateTime overlapStart = start1.isAfter(start2) ? start1 : start2;
                     LocalDateTime overlapEnd = end1.isBefore(end2) ? end1 : end2;
 
@@ -181,49 +325,6 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     return 0;
                 })
                 .asConstraint("Work center conflict");
-    }
-
-    /**
-     * 工序顺序约束 - 硬约束
-     * <p>确保有前后依赖关系的工序按正确顺序执行，防止工序执行顺序错误。</p>
-     * <p><strong>实现逻辑：</strong></p>
-     * <ol>
-     *   <li>筛选出已分配工序且有后续工序的时间槽（仅最后一个分片）</li>
-     *   <li>利用Procedure的nextProcedure链表结构连接前序和后续工序</li>
-     *   <li>检查后续工序是否在前置工序完成前开始</li>
-     *   <li>对违反顺序的情况应用硬约束惩罚</li>
-     * </ol>
-     *
-     * @param constraintFactory 约束工厂
-     * @return 工序顺序约束对象
-     */
-    private Constraint procedureSequenceConstraint(ConstraintFactory constraintFactory) {
-        return constraintFactory.forEachUniquePair(Timeslot.class,
-                        Joiners.equal(timeslot -> timeslot.getProcedure().getTaskNo()),
-                        Joiners.equal(timeslot -> timeslot.getProcedure().getOrderNo()),
-                        Joiners.equal(timeslot -> timeslot.getMaintenance() != null && timeslot.getMaintenance().getWorkCenter().getId().equals(timeslot.getWorkCenter().getId()))
-                ).filter((timeslot1, timeslot2) -> {
-                    // 确保两个时间槽都有有效的工序和开始时间
-                    return timeslot1.getProcedure() != null && timeslot2.getStartTime() != null && procedureConflict(timeslot1, timeslot2);
-                }).penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
-                    // 确保前置工序在后续工序之前完成
-                    LocalDateTime startTime1 = timeslot1.getStartTime().plusDays(1);
-                    LocalDateTime startTime2 = timeslot2.getStartTime();
-                    if (startTime1.isAfter(startTime2)) {
-                        return (int) ChronoUnit.MINUTES.between(startTime2, startTime1);
-                    }
-                    return 0;
-                }).asConstraint("Procedure sequence constraint");
-    }
-
-    private boolean procedureConflict(Timeslot t1, Timeslot t2) {
-        List<Procedure> procedures = t1.getProcedure().getNextProcedure();
-        for (Procedure procedure2 : procedures) {
-            if (t2.getProcedure().getId().equals(procedure2.getId())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -255,7 +356,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     LocalDateTime taskStart = timeslot.getStartTime();
                     LocalDateTime taskEnd = timeslot.getEndTime();
                     if (taskEnd == null) {
-                        taskEnd = taskStart.plusMinutes(timeslot.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                        taskEnd = taskStart.plusMinutes((long) (timeslot.getDuration() * 60));
                     }
                     LocalDateTime maintenanceStart = LocalDateTime.of(maintenance.getDate(),
                             maintenance.getStartTime() != null ? maintenance.getStartTime() : LocalTime.MIN);
@@ -323,24 +424,22 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     // 确保工作中心可用且有容量信息
                     return maintenance.getWorkCenter().getId().equals(timeslot.getWorkCenter().getId())
                             && maintenance.getStatus() != null && maintenance.getStatus().equals("y")
-                            && maintenance.getCapacity().compareTo(BigDecimal.ZERO) > 0;
+                            && maintenance.getCapacity().doubleValue() > 0.0;
                 })
                 .groupBy((Timeslot timeslot, WorkCenterMaintenance maintenance) -> new WorkCenterUtilizationKey(
                         timeslot.getWorkCenter().getId(),
                         timeslot.getStartTime().toLocalDate(),
-                        maintenance.getCapacity()
+                        maintenance.getCapacity().doubleValue()
                 ), ConstraintCollectors.sum((Timeslot timeslot, WorkCenterMaintenance maintenance) ->
-                        timeslot.getDuration().multiply(BigDecimal.valueOf(60)).intValue() // 转换为分钟
+                        (int) (timeslot.getDuration() * 60) // 转换为分钟
                 ))
                 .reward(HardSoftScore.ONE_SOFT,
                         (WorkCenterUtilizationKey key, Integer totalUsageMinutes) -> {
                             // 计算利用率百分比，最高100%
-                            BigDecimal capacityMinutes = key.getCapacity().multiply(BigDecimal.valueOf(60));
-                            BigDecimal utilization = BigDecimal.valueOf(totalUsageMinutes)
-                                    .divide(capacityMinutes, 2, RoundingMode.HALF_UP)
-                                    .multiply(BigDecimal.valueOf(100))
-                                    .min(BigDecimal.valueOf(100)); // 上限100%
-                            return utilization.intValue();
+                            double capacityMinutes = key.getCapacity() * 60;
+                            double utilization = ((double) totalUsageMinutes / capacityMinutes) * 100;
+                            utilization = Math.min(utilization, 100); // 上限100%
+                            return (int) utilization;
                         })
                 .asConstraint("Maximize machine utilization");
     }
@@ -350,9 +449,9 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
     private static class WorkCenterUtilizationKey {
         private final String workCenterId;
         private final LocalDate date;
-        private final BigDecimal capacity;
+        private final double capacity;
 
-        public WorkCenterUtilizationKey(String workCenterId, LocalDate date, BigDecimal capacity) {
+        public WorkCenterUtilizationKey(String workCenterId, LocalDate date, double capacity) {
             this.workCenterId = workCenterId;
             this.date = date;
             this.capacity = capacity;
@@ -431,7 +530,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                             LocalDateTime endTime1 = timeslot1.getEndTime();
                             if (endTime1 == null) {
                                 endTime1 = timeslot1.getStartTime().plusMinutes(
-                                        timeslot1.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                                        (long) (timeslot1.getDuration() * 60));
                             }
                             LocalDateTime startTime2 = timeslot2.getStartTime();
                             if (endTime1.isAfter(startTime2)) {
@@ -460,7 +559,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                             LocalDateTime endTime1 = timeslot1.getEndTime();
                             if (endTime1 == null) {
                                 endTime1 = timeslot1.getStartTime().plusMinutes(
-                                        timeslot1.getDuration().multiply(BigDecimal.valueOf(60)).longValue());
+                                        (long) (timeslot1.getDuration() * 60));
                             }
 
                             LocalDateTime startTime2 = timeslot2.getStartTime();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Typography, message, Form, Input, DatePicker, Select, Row, Col, Card, Tag } from 'antd';
+import { Table, Button, Space, Typography, message, Form, Input, DatePicker, Select, Row, Col, Card, Tag, Modal, InputNumber } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { queryTasks, startTasks } from '../services/orderService';
+import { queryTasks, startTasks, createTimeslot } from '../services/orderService';
 import type { Task, OrderTaskQueryParams } from '../services/orderService';
 
 const { Title } = Typography;
@@ -13,6 +13,37 @@ const OrderTasksPage: React.FC = () => {
   const [orderTasks, setOrderTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  
+  // 创建时间槽相关状态
+  const [createTimeslotModalVisible, setCreateTimeslotModalVisible] = useState<boolean>(false);
+  const [timeslotForm] = Form.useForm();
+  const [creatingTimeslot, setCreatingTimeslot] = useState<boolean>(false);
+  
+  // 处理创建时间槽
+  const handleCreateTimeslot = async () => {
+    try {
+      const values = await timeslotForm.validateFields();
+      
+      setCreatingTimeslot(true);
+      
+      // 提取选中的任务编号
+      const taskNos = selectedRowKeys.map(key => String(key));
+      
+      // 调用API，空数组作为procedureIds参数
+      // 确保只传递实际存在的值，使用默认值处理未定义的情况
+      const timeValue = values.time !== null && values.time !== undefined ? values.time : 0.5;
+      const sliceValue = values.slice !== null && values.slice !== undefined ? values.slice : 0;
+      await createTimeslot(taskNos, [], timeValue, sliceValue);
+      message.success('时间槽创建成功');
+      setCreateTimeslotModalVisible(false);
+      timeslotForm.resetFields();
+    } catch (error) {
+      message.error('时间槽创建失败，请重试');
+      console.error('创建时间槽失败:', error);
+    } finally {
+      setCreatingTimeslot(false);
+    }
+  };
   
   // 状态选项
   const statusOptions = [
@@ -239,6 +270,13 @@ const OrderTasksPage: React.FC = () => {
         >
           开始任务
         </Button>
+        <Button 
+          type="primary" 
+          onClick={() => setCreateTimeslotModalVisible(true)}
+          disabled={selectedRowKeys.length === 0}
+        >
+          创建时间槽
+        </Button>
       </Space>
       <Table
         rowKey="taskNo"
@@ -253,6 +291,70 @@ const OrderTasksPage: React.FC = () => {
           showTotal: (total) => `共 ${total} 条记录` 
         }}
       />
+      {/* 创建时间槽模态框 */}
+      <Modal
+        title="创建时间槽"
+        open={createTimeslotModalVisible}
+        onOk={handleCreateTimeslot}
+        onCancel={() => {
+          setCreateTimeslotModalVisible(false);
+          timeslotForm.resetFields();
+        }}
+        okText="确认"
+        cancelText="取消"
+        okButtonProps={{ loading: creatingTimeslot }}
+      >
+        <Form
+          form={timeslotForm}
+          layout="vertical"
+          initialValues={{
+            time: 0.5
+          }}
+        >
+          <Form.Item
+            name="time"
+            label="时间（小时）"
+            dependencies={['slice']}
+            rules={[
+              {
+                validator: (_, value, callback) => {
+                  const slice = timeslotForm.getFieldValue('slice');
+                  if (value !== undefined && value !== null && slice !== undefined && slice !== null && slice !== '') {
+                    callback('时间和分片序号只能填写一个');
+                  } else if (value === undefined && slice === undefined) {
+                    callback('请至少填写时间或分片序号中的一个');
+                  } else {
+                    callback();
+                  }
+                }
+              }
+            ]}
+          >
+            <InputNumber min={0.1} max={24} step={0.1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="slice"
+            label="分片序号"
+            dependencies={['time']}
+            rules={[
+              {
+                validator: (_, value, callback) => {
+                  const time = timeslotForm.getFieldValue('time');
+                  if (value !== undefined && value !== null && value !== '' && time !== undefined && time !== null) {
+                    callback('时间和分片序号只能填写一个');
+                  } else if (value === undefined && time === undefined) {
+                    callback('请至少填写时间或分片序号中的一个');
+                  } else {
+                    callback();
+                  }
+                }
+              }
+            ]}
+          >
+            <InputNumber min={0} step={1} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

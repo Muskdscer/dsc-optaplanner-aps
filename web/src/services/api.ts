@@ -218,3 +218,36 @@ export const logout = async (): Promise<void> => {
     window.location.href = '/login';
   }
 };
+
+// 创建时间槽
+export const createTimeslot = async (taskNos: string[], procedureIds: string[], time: number = 0.5, slice: number = 0): Promise<void> => {
+  try {
+    const params = new URLSearchParams();
+    // 添加taskNos参数
+    taskNos.forEach(taskNo => params.append('taskNos', taskNo));
+    if(taskNos.length === 0) {
+      params.append('taskNos', '');
+    }
+    // 添加procedureIds参数
+    procedureIds.forEach(procedureId => params.append('procedureIds', procedureId));
+    // 添加其他参数，添加空值检查
+    if(procedureIds.length === 0) {
+      params.append('procedureIds', '');
+    }
+    params.append('time', time !== null && time !== undefined ? time.toString() : '0.5');
+    params.append('slice', slice !== null && slice !== undefined ? slice.toString() : '0');
+    
+    const response: ApiResponse<void> = await apiClient.post('/api/timeslot/create', params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+    
+    if (response.code !== 200) {
+      throw new Error(`创建时间槽失败: ${response.msg || '未知错误'}`);
+    }
+  } catch (error) {
+    console.error('创建时间槽失败:', error);
+    throw error;
+  }
+};

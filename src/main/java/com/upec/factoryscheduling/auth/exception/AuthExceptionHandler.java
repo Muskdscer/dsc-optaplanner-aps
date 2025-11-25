@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * 认证异常处理器
  */
-@ControllerAdvice
+
 public class AuthExceptionHandler {
 
     /**

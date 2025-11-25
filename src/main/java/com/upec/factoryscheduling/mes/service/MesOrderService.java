@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -138,8 +139,9 @@ public class MesOrderService {
         }
         timeslot.setIndex(1);
         timeslot.setTotal(1);
+        timeslot.setProcedureIndex(procedure.getIndex());
         timeslot.setParallel(procedure.isParallel());
-        timeslot.setDuration(new BigDecimal(Double.toString(procedure.getMachineHours())));
+        timeslot.setDuration(procedure.getMachineHours());
         if (procedure.getStartTime() != null && procedure.getEndTime() != null) {
             timeslot.setManual(true);
         }
@@ -253,7 +255,11 @@ public class MesOrderService {
         Map<String, MesJjRouteProcedure> routeProcedureMap = routeProcedures.stream()
                 .collect(Collectors.toMap(m -> m.getRouteSeq() + "_" + m.getProcedureNo(), m -> m));
         List<Procedure> procedures = new ArrayList<>();
+
         for (MesJjProcedure mesProcedure : mesProcedures) {
+            if (mesProcedure.getProcedureNo().equals("15")) {
+                continue;
+            }
             MesJjRouteProcedure routeProcedure =
                     routeProcedureMap.get(mesProcedure.getRouteSeq() + "_" + mesProcedure.getProcedureNo());
             Procedure procedure = new Procedure();
@@ -307,8 +313,8 @@ public class MesOrderService {
                     }
                     nextProcedures.add(nextProcedure);
                 }
+                procedure.addNextProcedure(nextProcedure);
             }
-            procedure.setNextProcedure(nextProcedures);
         }
         return procedureService.saveProcedures(procedures);
     }

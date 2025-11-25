@@ -12,7 +12,7 @@ import org.optaplanner.core.api.domain.variable.ShadowVariable;
 
 import javax.persistence.*;
 import java.io.Serializable;
-import java.math.BigDecimal;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -39,7 +39,7 @@ public class Timeslot implements Serializable {
     @OneToOne(fetch = FetchType.EAGER)
     private WorkCenter workCenter; // 从procedure中继承工作中心，不需要作为规划变量
 
-    private BigDecimal duration; // 改为double类型，支持0.5小时的颗粒度
+    private double duration; // 使用double类型，支持0.5小时的颗粒度
 
     private Integer priority; // 优先级，直接存储计算好的优先级值
 
@@ -61,5 +61,8 @@ public class Timeslot implements Serializable {
     private Integer index; // 分片索引，用于标识同一工序的不同分片
 
     private Integer total; // 总分片数量
+
+    private int procedureIndex;
+
 
 }

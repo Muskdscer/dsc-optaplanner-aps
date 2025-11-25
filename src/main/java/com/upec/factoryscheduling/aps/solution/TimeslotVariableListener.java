@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.domain.variable.VariableListener;
 import org.optaplanner.core.api.score.director.ScoreDirector;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -68,10 +67,10 @@ public class TimeslotVariableListener implements VariableListener<FactorySchedul
         }
         
         // 计算并更新endTime字段 - 优化计算逻辑
-        if (timeslot.getDuration() != null && timeslot.getDuration().doubleValue() > 0) {
+        if (timeslot.getDuration() > 0) {
             scoreDirector.beforeVariableChanged(timeslot, "endTime");
             // 使用更精确的分钟计算
-            long durationMinutes = timeslot.getDuration().multiply(BigDecimal.valueOf(60)).longValue();
+            long durationMinutes = (long) (timeslot.getDuration() * 60);
             timeslot.setEndTime(timeslot.getStartTime().plusMinutes(durationMinutes));
             scoreDirector.afterVariableChanged(timeslot, "endTime");
         } else {

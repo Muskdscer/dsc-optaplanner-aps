@@ -22,6 +22,7 @@ export {
   syncOrderData,
   queryTasks,
   startTasks,
+  createTimeslot,
   // 认证相关API
   login,
   register,

@@ -10,6 +10,7 @@ import javax.persistence.*;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -45,14 +46,26 @@ public class Procedure implements Serializable {
 
     private LocalDateTime endTime;
 
-//    @ShadowVariable(variableListenerClass = ProcedureVariableListener.class, sourceVariableName = "timeslots")
+    //    @ShadowVariable(variableListenerClass = ProcedureVariableListener.class, sourceVariableName = "timeslots")
     private LocalDate planStartDate;
 
-//    @ShadowVariable(variableListenerClass = ProcedureVariableListener.class, sourceVariableName = "timeslots")
+    //    @ShadowVariable(variableListenerClass = ProcedureVariableListener.class, sourceVariableName = "timeslots")
     private LocalDate planEndDate;
 
     private String status;
 
     private boolean parallel;
+
+    private int index = 1;
+
+    public void addNextProcedure(Procedure procedure) {
+        if (this.nextProcedure == null) {
+            this.nextProcedure = new ArrayList<>();
+        }
+        this.nextProcedure.add(procedure);
+        if (this.index < this.index + 1) {
+            procedure.setIndex(this.index + 1);
+        }
+    }
 
 }
