@@ -129,25 +129,26 @@ public class TimeslotService {
     }
 
     private List<Timeslot> splitTimeslot(Timeslot timeslot, double time) {
+        time = time * 60;
         List<Timeslot> timeslots = new ArrayList<>();
-        double duration = timeslot.getProcedure().getMachineHours();
+        int duration = timeslot.getProcedure().getMachineMinutes();
         int index = timeslot.getIndex();
         if (time >= duration) {
             timeslots.add(timeslot);
             return timeslots;
         }
-        duration = duration - time;
-        timeslot.setDuration(time);
+        duration = duration - (int) time;
+        timeslot.setDuration((int) time);
         timeslots.add(timeslot);
         while (duration > 0) {
             Timeslot newTimeslot = new Timeslot();
             BeanUtils.copyProperties(timeslot, newTimeslot);
             index++;
             newTimeslot.setId(timeslot.getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
-            newTimeslot.setDuration(Math.min(duration, time));
+            newTimeslot.setDuration(Math.min(duration, (int) time));
             newTimeslot.setIndex(index);
             timeslots.add(newTimeslot);
-            duration = duration - time;
+            duration = duration - (int) time;
         }
         int total = timeslots.size();
         return timeslots.stream().peek(t -> t.setTotal(total)).collect(Collectors.toList());
@@ -155,9 +156,9 @@ public class TimeslotService {
 
     private List<Timeslot> splitTimeslot(Timeslot timeslot, int slice) {
         List<Timeslot> timeslots = new ArrayList<>();
-        double duration = timeslot.getProcedure().getMachineHours();
+        int duration = timeslot.getProcedure().getMachineMinutes();
         int index = timeslot.getIndex();
-        double interval = Math.round(duration / slice * 100) / 100.00;
+        int interval = Math.round((float) duration / slice * 100) / 100;
         timeslot.setDuration(interval);
         timeslots.add(timeslot);
         for (int i = 1; i < slice; i++) {

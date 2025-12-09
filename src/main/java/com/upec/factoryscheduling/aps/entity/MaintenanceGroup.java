@@ -6,6 +6,6 @@ import java.util.List;
 
 @Data
 public class MaintenanceGroup {
-    private String id;
+    private String workCenterCode;
     private List<WorkCenterMaintenance> maintenances;
 }

@@ -1,20 +1,19 @@
 package com.upec.factoryscheduling.aps.entity;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.*;
-import java.math.BigDecimal;
+import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Entity
 @Table(name = "work_center_maintenance")
-@Data
 @Getter
 @Setter
-public class WorkCenterMaintenance {
+public class WorkCenterMaintenance implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     @Id
     private String id;
@@ -27,7 +26,7 @@ public class WorkCenterMaintenance {
 
     private LocalDate date;
 
-    private BigDecimal capacity;
+    private int capacity;
 
     private String status;
 
@@ -37,56 +36,44 @@ public class WorkCenterMaintenance {
 
     private LocalTime endTime;
 
-    private BigDecimal usageTime;
+    private int usageTime;
 
     /**
      * 检查是否还有可用容量
      */
-    public boolean hasAvailableCapacity() {
-        BigDecimal capacity = this.capacity != null ? this.capacity : BigDecimal.ZERO;
-        BigDecimal usage = this.usageTime != null ? this.usageTime : BigDecimal.ZERO;
-        return usage.compareTo(capacity) < 0;
+    public synchronized boolean hasAvailableCapacity() {
+        int capacity = this.capacity;
+        int usage = this.usageTime;
+        return usage < capacity;
     }
 
     /**
      * 获取剩余可用容量
      */
-    public BigDecimal getRemainingCapacity() {
-        BigDecimal capacity = this.capacity != null ? this.capacity : BigDecimal.ZERO;
-        BigDecimal usage = this.usageTime != null ? this.usageTime : BigDecimal.ZERO;
-        return capacity.subtract(usage);
+    public synchronized int getRemainingCapacity() {
+        int capacity = this.capacity;
+        int usage = this.usageTime;
+        return capacity - usage;
     }
 
     /**
-     * 累加使用时间
+     * 累加使用时间 - 线程安全
      */
-    public void addUsageTime(BigDecimal duration) {
-        if (this.usageTime == null) {
-            this.usageTime = BigDecimal.ZERO;
-        }
-        if (duration != null) {
-            duration = duration.multiply(BigDecimal.valueOf(60));
-            this.usageTime = this.usageTime.add(duration);
-        }
+    public synchronized void addUsageTime(int duration) {
+        this.usageTime += duration;
     }
 
     /**
-     * 减少使用时间
+     * 减少使用时间 - 线程安全
      */
-    public void subtractUsageTime(BigDecimal duration) {
-        if (this.usageTime != null && duration != null) {
-            duration = duration.multiply(BigDecimal.valueOf(60));
-            this.usageTime = this.usageTime.subtract(duration);
-            if (this.usageTime.compareTo(BigDecimal.ZERO) < 0) {
-                this.usageTime = BigDecimal.ZERO;
-            }
-        }
+    public synchronized void subtractUsageTime(int duration) {
+    this.usageTime -= duration;
     }
 
     public WorkCenterMaintenance() {
     }
 
-    public WorkCenterMaintenance(WorkCenter workCenter, LocalDate date,  BigDecimal capacity, String description) {
+    public WorkCenterMaintenance(WorkCenter workCenter, LocalDate date, int capacity, String description) {
         this.workCenter = workCenter;
         this.date = date;
         this.capacity = capacity;

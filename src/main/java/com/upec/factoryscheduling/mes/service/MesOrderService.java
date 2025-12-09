@@ -141,7 +141,7 @@ public class MesOrderService {
         timeslot.setTotal(1);
         timeslot.setProcedureIndex(procedure.getIndex());
         timeslot.setParallel(procedure.isParallel());
-        timeslot.setDuration(procedure.getMachineHours());
+        timeslot.setDuration(procedure.getMachineMinutes());
         if (procedure.getStartTime() != null && procedure.getEndTime() != null) {
             timeslot.setManual(true);
         }
@@ -185,7 +185,7 @@ public class MesOrderService {
         for (ApsWorkCenterMaintenance apsWorkCenterMaintenance : apsWorkCenterMaintenances) {
             WorkCenterMaintenance maintenance = new WorkCenterMaintenance();
             maintenance.setYear(DateUtils.parseLocalDate(apsWorkCenterMaintenance.getLocalDate()).getYear());
-            maintenance.setCapacity(java.math.BigDecimal.valueOf(apsWorkCenterMaintenance.getCapacity()));
+            maintenance.setCapacity(apsWorkCenterMaintenance.getCapacity());
             maintenance.setDate(DateUtils.parseLocalDate(apsWorkCenterMaintenance.getLocalDate()));
             maintenance.setWorkCenter(workCenterMap.get(apsWorkCenterMaintenance.getWorkCenterCode()));
             maintenance.setStartTime(DateUtils.parseDateTime(apsWorkCenterMaintenance.getStartTime()).toLocalTime());
@@ -292,7 +292,7 @@ public class MesOrderService {
                 procedure.setEndTime(DateUtils.parseDateTime(mesProcedure.getFactEndDate()));
             }
             if (routeProcedure != null && routeProcedure.getMachineHours() != null) {
-                procedure.setMachineHours(Double.parseDouble(routeProcedure.getMachineHours()));
+                procedure.setMachineMinutes((int) (Double.parseDouble(routeProcedure.getMachineHours())*60));
             }
             procedures.add(procedure);
         }

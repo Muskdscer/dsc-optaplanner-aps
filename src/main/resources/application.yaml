@@ -54,7 +54,7 @@ optaplanner:
       # 总体时间限制
       spent-limit: ${SOLVER_TIME_LIMIT:2m}
       # 最佳分数限制
-      best-score-limit: "0hard/*soft"
+      best-score-limit: "0hard/0soft"
       # 无改进时间限制
       unimproved-spent-limit: 2m
 

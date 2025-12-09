@@ -1,7 +1,6 @@
 package com.upec.factoryscheduling.aps.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-@Data
+
 @Getter
 @Setter
 @Entity
@@ -33,7 +32,7 @@ public class Procedure implements Serializable {
 
     private Integer procedureNo;
 
-    private double machineHours;
+    private int machineMinutes;
 
     @ElementCollection(fetch = FetchType.EAGER)
     private List<Integer> nextProcedureNo;

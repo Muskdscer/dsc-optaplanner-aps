@@ -43,7 +43,7 @@ public class ApsWorkCenterMaintenanceService {
                 workCenterMaintenance.setLocalDate(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
                 workCenterMaintenance.setStartTime(date.atTime(9, 0).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
                 workCenterMaintenance.setEndTime(date.atTime(17, 30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-                workCenterMaintenance.setCapacity(480L);
+                workCenterMaintenance.setCapacity(480);
                 workCenterMaintenance.setDescription(baseWorkCenter.getDescription());
                 workCenterMaintenances.add(workCenterMaintenance);
             }
@@ -80,7 +80,7 @@ public class ApsWorkCenterMaintenanceService {
                 workCenterMaintenance.setLocalDate(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
                 workCenterMaintenance.setStartTime(date.atTime(9, 0).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
                 workCenterMaintenance.setEndTime(date.atTime(17, 30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-                workCenterMaintenance.setCapacity(480L);
+                workCenterMaintenance.setCapacity(480);
                 workCenterMaintenance.setDescription(baseWorkCenter.getDescription() + " - 工作日历");
                 workCenterMaintenances.add(workCenterMaintenance);
             }

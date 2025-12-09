@@ -3,14 +3,24 @@ package com.upec.factoryscheduling.aps.solution;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
-import lombok.Data;
-import org.optaplanner.core.api.domain.solution.*;
+import lombok.Getter;
+import lombok.Setter;
+import org.optaplanner.core.api.domain.solution.PlanningEntityCollectionProperty;
+import org.optaplanner.core.api.domain.solution.PlanningScore;
+import org.optaplanner.core.api.domain.solution.PlanningSolution;
+import org.optaplanner.core.api.domain.solution.ProblemFactCollectionProperty;
 import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolverStatus;
+import org.optaplanner.core.api.solver.change.ProblemChange;
+import org.optaplanner.core.config.solver.SolverConfig;
 
-import javax.xml.bind.annotation.XmlRootElement;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 /**
  * 工厂调度规划解决方案类
@@ -21,14 +31,18 @@ import java.util.List;
  * </p>
  */
 @PlanningSolution  // 标记此类为OptaPlanner规划解决方案
-@Data  // Lombok注解，自动生成getter、setter、equals、hashCode和toString方法
-@XmlRootElement // 支持多线程规划所需的根元素注解
-public class FactorySchedulingSolution {
+public class FactorySchedulingSolution implements IncrementalSolution<FactorySchedulingSolution>,  Serializable {
+    private static final long serialVersionUID = 1L;
+
+    @Getter
+    @Setter
+    private Long problemId;
+
 
     /**
-     * 规划实体集合 - 需要被优化安排的时间槽列表
-     * <p>每个Timeslot代表一个需要被分配到特定工作中心和开始时间的工序</p>
+     * 时间槽（工序）列表 - 规划实体集合
      */
+    @Getter
     @PlanningEntityCollectionProperty
     private List<Timeslot> timeslots;
 
@@ -36,8 +50,10 @@ public class FactorySchedulingSolution {
     /**
      * 设备维护计划列表 - 影响工作中心可用性的约束条件和规划变量取值范围
      * <p>在维护期间，对应的工作中心不可用</p>
+     * 使用CopyOnWriteArrayList确保线程安全的读取操作
      */
     @JsonIgnore
+    @Getter
     @ValueRangeProvider(id = "maintenanceRange")
     @ProblemFactCollectionProperty
     private List<WorkCenterMaintenance> maintenances;
@@ -48,21 +64,54 @@ public class FactorySchedulingSolution {
      * - 硬约束：必须满足的规则，如设备冲突、维护时间冲突等
      * - 软约束：应当尽量满足的规则，如订单优先级、完成时间等
      * </p>
+     * volatile确保多线程环境下的可见性
      */
     @PlanningScore
-    private HardSoftScore score;
+    private volatile HardSoftScore score;
 
     /**
      * 求解器状态 - 表示当前规划过程的状态
      * <p>如NOT_SOLVING、SOLVING_ACTIVE、SOLVING_SCHEDULED等</p>
+     * volatile确保多线程环境下的可见性
      */
-    private SolverStatus solverStatus;
+    private volatile SolverStatus solverStatus;
+    
+    /**
+     * 获取规划分数
+     */
+    public synchronized HardSoftScore getScore() {
+        return score;
+    }
+    
+    /**
+     * 设置规划分数
+     */
+    public synchronized void setScore(HardSoftScore score) {
+        this.score = score;
+    }
+    
+    /**
+     * 获取求解器状态
+     */
+    public synchronized SolverStatus getSolverStatus() {
+        return solverStatus;
+    }
+    
+    /**
+     * 设置求解器状态
+     */
+    public synchronized void setSolverStatus(SolverStatus solverStatus) {
+        this.solverStatus = solverStatus;
+    }
 
     /**
      * 默认构造函数
      * <p>为了序列化和框架要求而提供</p>
      */
     public FactorySchedulingSolution() {
+        // 初始化线程安全的列表以避免空指针异常和确保并发安全
+        this.timeslots = new CopyOnWriteArrayList<>();
+        this.maintenances = new CopyOnWriteArrayList<>();
     }
 
     /**
@@ -73,7 +122,93 @@ public class FactorySchedulingSolution {
      */
     public FactorySchedulingSolution(List<Timeslot> timeslots,
                                      List<WorkCenterMaintenance> maintenances) {
-        this.timeslots = timeslots;
-        this.maintenances = maintenances;
+        // 使用CopyOnWriteArrayList确保线程安全
+        this.timeslots = timeslots != null ? new CopyOnWriteArrayList<>(timeslots) : new CopyOnWriteArrayList<>();
+        this.maintenances = maintenances != null ? new CopyOnWriteArrayList<>(maintenances) : new CopyOnWriteArrayList<>();
     }
+
+    /**
+     * 线程安全地设置时间槽列表
+     * @param timeslots 新的时间槽列表
+     */
+    public synchronized void setTimeslots(List<Timeslot> timeslots) {
+        this.timeslots = timeslots != null ? new CopyOnWriteArrayList<>(timeslots) : new CopyOnWriteArrayList<>();
+    }
+
+    /**
+     * 线程安全地设置维护计划列表
+     * @param maintenances 新的维护计划列表
+     */
+    public synchronized void setMaintenances(List<WorkCenterMaintenance> maintenances) {
+        this.maintenances = maintenances != null ? new CopyOnWriteArrayList<>(maintenances) : new CopyOnWriteArrayList<>();
+    }
+
+    /**
+     * 线程安全地添加单个时间槽
+     * @param timeslot 要添加的时间槽
+     */
+    public synchronized void addTimeslot(Timeslot timeslot) {
+        if (timeslot != null) {
+            this.timeslots.add(timeslot);
+        }
+    }
+
+    /**
+     * 线程安全地添加单个维护计划
+     * @param maintenance 要添加的维护计划
+     */
+    public synchronized void addMaintenance(WorkCenterMaintenance maintenance) {
+        if (maintenance != null) {
+            this.maintenances.add(maintenance);
+        }
+    }
+
+    /**
+     * 线程安全地移除时间槽
+     * @param timeslot 要移除的时间槽
+     * @return 是否成功移除
+     */
+    public synchronized boolean removeTimeslot(Timeslot timeslot) {
+        return timeslot != null && this.timeslots.remove(timeslot);
+    }
+
+    /**
+     * 线程安全地移除维护计划
+     * @param maintenance 要移除的维护计划
+     * @return 是否成功移除
+     */
+    public synchronized boolean removeMaintenance(WorkCenterMaintenance maintenance) {
+        return maintenance != null && this.maintenances.remove(maintenance);
+    }
+
+    /**
+     * 获取不可修改的时间槽列表视图，防止外部修改
+     * @return 不可修改的时间槽列表
+     */
+    public List<Timeslot> getUnmodifiableTimeslots() {
+        return Collections.unmodifiableList(this.timeslots);
+    }
+
+    /**
+     * 获取不可修改的维护计划列表视图，防止外部修改
+     * @return 不可修改的维护计划列表
+     */
+    public List<WorkCenterMaintenance> getUnmodifiableMaintenances() {
+        return Collections.unmodifiableList(this.maintenances);
+    }
+
+    // 增量求解支持
+    private List<ProblemChange<FactorySchedulingSolution>> pendingChanges = new ArrayList<>();
+
+    @Override
+    public void addProblemChange(ProblemChange<FactorySchedulingSolution> problemChange) {
+        pendingChanges.add(problemChange);
+    }
+
+    @Override
+    public void clearProcessedChanges() {
+        pendingChanges.clear();
+    }
+
+
 }

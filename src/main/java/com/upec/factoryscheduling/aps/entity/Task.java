@@ -1,6 +1,5 @@
 package com.upec.factoryscheduling.aps.entity;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,7 +10,7 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Data
+
 @Getter
 @Setter
 @Entity

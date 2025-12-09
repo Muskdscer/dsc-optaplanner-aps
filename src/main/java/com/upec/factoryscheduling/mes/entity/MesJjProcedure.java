@@ -113,7 +113,4 @@ public class MesJjProcedure {
     @Column(name = "QUICKPROCESSINSTANCE", length = 50)
     private String quickProcessInstance;
 
-    public String getRouteSeq() {
-        return routeSeq;
-    }
 }

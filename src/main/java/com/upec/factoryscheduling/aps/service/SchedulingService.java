@@ -68,20 +68,10 @@ public class SchedulingService {
      */
     private TimeslotService timeslotService;
 
-    /**
-     * 时间槽仓库 - 直接操作时间槽数据
-     */
-    private TimeslotRepository timeslotRepository;
-
 
     @Autowired
     public void setTimeslotService(TimeslotService timeslotService) {
         this.timeslotService = timeslotService;
-    }
-
-    @Autowired
-    public void setTimeslotRepository(TimeslotRepository timeslotRepository) {
-        this.timeslotRepository = timeslotRepository;
     }
 
     @Autowired
@@ -299,8 +289,7 @@ public class SchedulingService {
                         if (procCompare != 0) return procCompare;
 
                         // 然后按分片索引排序
-                        return Integer.compare(t1.getIndex() != null ? t1.getIndex() : 0,
-                                t2.getIndex() != null ? t2.getIndex() : 0);
+                        return Integer.compare(t1.getIndex(), t2.getIndex());
                     })
                     .collect(Collectors.toList());
 
@@ -605,7 +594,7 @@ public class SchedulingService {
                     maintenance);
 
             // 检查是否超出设备容量
-            if (BigDecimal.valueOf(countDailyHours).compareTo(maintenance.getCapacity()) > 0) {
+            if (countDailyHours > maintenance.getCapacity()) {
                 validateSolution.setMessage("超出当日机器容量!");
             }
 

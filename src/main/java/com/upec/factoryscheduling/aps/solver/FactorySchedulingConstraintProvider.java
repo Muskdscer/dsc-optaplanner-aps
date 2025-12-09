@@ -1,13 +1,13 @@
 package com.upec.factoryscheduling.aps.solver;
 
-import com.upec.factoryscheduling.aps.entity.Timeslot;
-import com.upec.factoryscheduling.aps.entity.WorkCenterMaintenance;
+import com.upec.factoryscheduling.aps.entity.*;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.score.stream.*;
 import org.springframework.stereotype.Component;
 
+import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -24,7 +24,8 @@ import java.time.temporal.ChronoUnit;
  */
 @Slf4j  // Lombok注解，提供日志记录功能
 @Component  // Spring组件，使此类可被自动注入
-public class FactorySchedulingConstraintProvider implements ConstraintProvider {
+public class FactorySchedulingConstraintProvider implements ConstraintProvider, Serializable {
+    private static final long serialVersionUID = 1L;
     /**
      * 定义所有调度约束条件
      * <p>返回约束数组，包含系统中所有的调度规则，分为以下几类：</p>
@@ -72,12 +73,22 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
 
 
     private boolean workCenterProximity(Timeslot timeslot) {
-        return (timeslot.getMaintenance() != null && timeslot.getWorkCenter() != null
-                && timeslot.getMaintenance().getWorkCenter() != null
-                && timeslot.getMaintenance().getCapacity() != null
-                && timeslot.getMaintenance().getUsageTime() != null)
-                && (!timeslot.getWorkCenter().getWorkCenterCode().equals(timeslot.getMaintenance().getWorkCenter().getWorkCenterCode()))
-                && (timeslot.getMaintenance().getCapacity().compareTo(timeslot.getMaintenance().getUsageTime()) >= 0);
+        // 使用局部变量复制，避免多线程访问中的不一致性
+        if (timeslot == null) {
+            return false;
+        }
+        // 原子获取属性值，避免读取过程中值被其他线程修改
+        String workCenterCode = timeslot.getWorkCenter() != null ? timeslot.getWorkCenter().getWorkCenterCode() : null;
+        String maintenanceWorkCenterCode = (timeslot.getMaintenance() != null && timeslot.getMaintenance().getWorkCenter() != null) 
+                ? timeslot.getMaintenance().getWorkCenter().getWorkCenterCode() 
+                : null;
+        // 使用BigDecimal兼容的类型处理
+        Number maintenanceCapacityObj = timeslot.getMaintenance() != null ? timeslot.getMaintenance().getCapacity() : null;
+        Number maintenanceUsageTimeObj = timeslot.getMaintenance() != null ? timeslot.getMaintenance().getUsageTime() : null;
+        Integer maintenanceCapacity = maintenanceCapacityObj != null ? maintenanceCapacityObj.intValue() : null;
+        Integer maintenanceUsageTime = maintenanceUsageTimeObj != null ? maintenanceUsageTimeObj.intValue() : null;
+        
+        return workCenterCode != null && maintenanceWorkCenterCode != null && !workCenterCode.equals(maintenanceWorkCenterCode) && maintenanceCapacity.compareTo(maintenanceUsageTime) >= 0;
     }
 
     /**
@@ -98,7 +109,15 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
 
 
     private boolean procedureStartDateProximity(Timeslot t1, Timeslot t2) {
-        return t1.getStartTime() != null && t2.getStartTime() != null && (t2.getStartTime().isAfter(t1.getStartTime()));
+        // 使用局部变量复制，避免多线程访问中的不一致性
+        if (t1 == null || t2 == null) {
+            return false;
+        }
+        // 原子获取属性值，避免读取过程中值被其他线程修改
+        LocalDateTime startTime1 = t1.getStartTime();
+        LocalDateTime startTime2 = t2.getStartTime();
+        
+        return startTime1 != null && startTime2 != null && startTime2.isAfter(startTime1);
     }
 
     /**
@@ -125,62 +144,113 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
         // 合并两个约束逻辑：基本工作中心冲突检查 + 同一天Maintenance限制
         return constraintFactory.forEachUniquePair(Timeslot.class)
                 .filter((timeslot1, timeslot2) -> {
-                    // 确保两个时间槽都有有效的工作中心和开始时间
-                    if (timeslot1.getWorkCenter() == null || timeslot2.getWorkCenter() == null
-                            || timeslot1.getStartTime() == null || timeslot2.getStartTime() == null
-                            || timeslot1.getId().equals(timeslot2.getId())) {
+                    // 使用局部变量复制，避免多线程访问中的不一致性
+                    if (timeslot1 == null || timeslot2 == null) {
                         return false;
                     }
-
+                    
+                    // 原子获取属性值，处理ID类型转换
+                    String timeslot1IdStr = timeslot1.getId() != null ? timeslot1.getId().toString() : null;
+                    String timeslot2IdStr = timeslot2.getId() != null ? timeslot2.getId().toString() : null;
+                    Long timeslot1Id = timeslot1IdStr != null ? Long.valueOf(timeslot1IdStr) : null;
+                    Long timeslot2Id = timeslot2IdStr != null ? Long.valueOf(timeslot2IdStr) : null;
+                    
+                    // 快速排除自身比较
+                    if (timeslot1Id != null && timeslot2Id != null && timeslot1Id.equals(timeslot2Id)) {
+                        return false;
+                    }
+                    
+                    // 获取工作中心和时间信息
+                    String workCenterId1 = timeslot1.getWorkCenter() != null ? timeslot1.getWorkCenter().getId() : null;
+                    String workCenterId2 = timeslot2.getWorkCenter() != null ? timeslot2.getWorkCenter().getId() : null;
+                    LocalDateTime startTime1 = timeslot1.getStartTime();
+                    LocalDateTime startTime2 = timeslot2.getStartTime();
+                    
+                    // 确保有有效信息才能继续检查
+                    if (workCenterId1 == null || workCenterId2 == null || startTime1 == null || startTime2 == null) {
+                        return false;
+                    }
+                    
                     // 检查基本工作中心冲突（同一工作中心且时间重叠）
-                    boolean sameWorkCenter = timeslot1.getWorkCenter().getId().equals(timeslot2.getWorkCenter().getId());
-                    LocalDateTime end1 = timeslot1.getEndTime() != null ? timeslot1.getEndTime() : timeslot1.getStartTime().plusMinutes((long) (timeslot1.getDuration() * 60));
-                    LocalDateTime end2 = timeslot2.getEndTime() != null ? timeslot2.getEndTime() : timeslot2.getStartTime().plusMinutes((long) (timeslot2.getDuration() * 60));
-                    boolean timeOverlap = !(timeslot1.getStartTime().isAfter(end2) || timeslot2.getStartTime().isAfter(end1));
+                    boolean sameWorkCenter = workCenterId1.equals(workCenterId2);
+                    
+                    // 计算结束时间，使用局部变量避免多次访问
+                    // 由于double不能为null，直接获取值，如果是Double类型则需要额外处理
+                    double duration1 = timeslot1.getDuration();
+                    double duration2 = timeslot2.getDuration();
+                    LocalDateTime end1 = timeslot1.getEndTime() != null ? timeslot1.getEndTime() : startTime1.plusMinutes((long) (duration1 * 60));
+                    LocalDateTime end2 = timeslot2.getEndTime() != null ? timeslot2.getEndTime() : startTime2.plusMinutes((long) (duration2 * 60));
+                    
+                    boolean timeOverlap = !(startTime1.isAfter(end2) || startTime2.isAfter(end1));
                     boolean basicConflict = sameWorkCenter && timeOverlap;
+                    
+                    // 如果已经确定有基本冲突，可以立即返回true
+                    if (basicConflict) {
+                        return true;
+                    }
 
                     // 检查同一天Maintenance冲突（同一任务、同一工序，使用了同一天的Maintenance）
-                    boolean sameTask = timeslot1.getTask() != null && timeslot2.getTask() != null
-                            && timeslot1.getTask().getTaskNo().equals(timeslot2.getTask().getTaskNo());
-                    boolean sameProcedure = timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
-                            && timeslot1.getProcedure().getId().equals(timeslot2.getProcedure().getId());
-                    boolean sameDayMaintenance = timeslot1.getMaintenance() != null && timeslot2.getMaintenance() != null
-                            && timeslot1.getMaintenance().getDate() != null
-                            && timeslot2.getMaintenance().getDate() != null
-                            && timeslot1.getMaintenance().getDate().equals(timeslot2.getMaintenance().getDate());
+                    String taskNo1 = timeslot1.getTask() != null ? timeslot1.getTask().getTaskNo() : null;
+                    String taskNo2 = timeslot2.getTask() != null ? timeslot2.getTask().getTaskNo() : null;
+                    String procedureId1 = timeslot1.getProcedure() != null ? timeslot1.getProcedure().getId() : null;
+                    String procedureId2 = timeslot2.getProcedure() != null ? timeslot2.getProcedure().getId() : null;
+                    LocalDate maintenanceDate1 = timeslot1.getMaintenance() != null ? timeslot1.getMaintenance().getDate() : null;
+                    LocalDate maintenanceDate2 = timeslot2.getMaintenance() != null ? timeslot2.getMaintenance().getDate() : null;
+                    
+                    boolean sameTask = taskNo1 != null && taskNo2 != null && taskNo1.equals(taskNo2);
+                    boolean sameProcedure = procedureId1 != null && procedureId2 != null && procedureId1.equals(procedureId2);
+                    boolean sameDayMaintenance = maintenanceDate1 != null && maintenanceDate2 != null && maintenanceDate1.equals(maintenanceDate2);
                     boolean maintenanceConflict = sameTask && sameProcedure && sameDayMaintenance;
 
                     // 只要违反任一约束，就返回true
-                    return basicConflict || maintenanceConflict;
+                    return maintenanceConflict;
                 })
                 .penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
-                    // 确保两个时间槽都有有效的工作中心和开始时间
-                    if (timeslot1.getWorkCenter() == null || timeslot2.getWorkCenter() == null
-                            || timeslot1.getStartTime() == null || timeslot2.getStartTime() == null) {
+                    // 使用局部变量复制，避免多线程访问中的不一致性
+                    if (timeslot1 == null || timeslot2 == null) {
+                        return 0;
+                    }
+                    
+                    // 获取工作中心和时间信息
+                    String workCenterId1 = timeslot1.getWorkCenter() != null ? timeslot1.getWorkCenter().getId() : null;
+                    String workCenterId2 = timeslot2.getWorkCenter() != null ? timeslot2.getWorkCenter().getId() : null;
+                    LocalDateTime startTime1 = timeslot1.getStartTime();
+                    LocalDateTime startTime2 = timeslot2.getStartTime();
+                    
+                    // 确保有有效信息才能继续检查
+                    if (workCenterId1 == null || workCenterId2 == null || startTime1 == null || startTime2 == null) {
                         return 0;
                     }
 
                     // 计算基本工作中心冲突的惩罚值
-                    boolean sameWorkCenter = timeslot1.getWorkCenter().getId().equals(timeslot2.getWorkCenter().getId());
-                    LocalDateTime end1 = timeslot1.getEndTime() != null ? timeslot1.getEndTime() : timeslot1.getStartTime().plusMinutes((long) (timeslot1.getDuration() * 60));
-                    LocalDateTime end2 = timeslot2.getEndTime() != null ? timeslot2.getEndTime() : timeslot2.getStartTime().plusMinutes((long) (timeslot2.getDuration() * 60));
-                    boolean timeOverlap = !(timeslot1.getStartTime().isAfter(end2) || timeslot2.getStartTime().isAfter(end1));
+                    boolean sameWorkCenter = workCenterId1.equals(workCenterId2);
+                    
+                    // 计算结束时间，使用局部变量避免多次访问
+                    // 由于double不能为null，直接获取值
+                    double duration1 = timeslot1.getDuration();
+                    double duration2 = timeslot2.getDuration();
+                    LocalDateTime end1 = timeslot1.getEndTime() != null ? timeslot1.getEndTime() : startTime1.plusMinutes((long) (duration1 * 60));
+                    LocalDateTime end2 = timeslot2.getEndTime() != null ? timeslot2.getEndTime() : startTime2.plusMinutes((long) (duration2 * 60));
+                    
+                    boolean timeOverlap = !(startTime1.isAfter(end2) || startTime2.isAfter(end1));
                     int basicPenalty = 0;
                     if (sameWorkCenter && timeOverlap) {
-                        LocalDateTime overlapStart = timeslot1.getStartTime().isAfter(timeslot2.getStartTime()) ? timeslot1.getStartTime() : timeslot2.getStartTime();
+                        LocalDateTime overlapStart = startTime1.isAfter(startTime2) ? startTime1 : startTime2;
                         LocalDateTime overlapEnd = end1.isBefore(end2) ? end1 : end2;
                         basicPenalty = (int) ChronoUnit.MINUTES.between(overlapStart, overlapEnd);
                     }
 
                     // 计算同一天Maintenance冲突的惩罚值
-                    boolean sameTask = timeslot1.getTask() != null && timeslot2.getTask() != null
-                            && timeslot1.getTask().getTaskNo().equals(timeslot2.getTask().getTaskNo());
-                    boolean sameProcedure = timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
-                            && timeslot1.getProcedure().getId().equals(timeslot2.getProcedure().getId());
-                    boolean sameDayMaintenance = timeslot1.getMaintenance() != null && timeslot2.getMaintenance() != null
-                            && timeslot1.getMaintenance().getDate() != null
-                            && timeslot2.getMaintenance().getDate() != null
-                            && timeslot1.getMaintenance().getDate().equals(timeslot2.getMaintenance().getDate());
+                    String taskNo1 = timeslot1.getTask() != null ? timeslot1.getTask().getTaskNo() : null;
+                    String taskNo2 = timeslot2.getTask() != null ? timeslot2.getTask().getTaskNo() : null;
+                    String procedureId1 = timeslot1.getProcedure() != null ? timeslot1.getProcedure().getId() : null;
+                    String procedureId2 = timeslot2.getProcedure() != null ? timeslot2.getProcedure().getId() : null;
+                    LocalDate maintenanceDate1 = timeslot1.getMaintenance() != null ? timeslot1.getMaintenance().getDate() : null;
+                    LocalDate maintenanceDate2 = timeslot2.getMaintenance() != null ? timeslot2.getMaintenance().getDate() : null;
+                    
+                    boolean sameTask = taskNo1 != null && taskNo2 != null && taskNo1.equals(taskNo2);
+                    boolean sameProcedure = procedureId1 != null && procedureId2 != null && procedureId1.equals(procedureId2);
+                    boolean sameDayMaintenance = maintenanceDate1 != null && maintenanceDate2 != null && maintenanceDate1.equals(maintenanceDate2);
                     int maintenancePenalty = 0;
                     if (sameTask && sameProcedure && sameDayMaintenance) {
                         maintenancePenalty = 100; // 固定惩罚值
@@ -233,7 +303,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     LocalDateTime taskStart = timeslot.getStartTime();
                     LocalDateTime taskEnd = timeslot.getEndTime();
                     if (taskEnd == null) {
-                        taskEnd = taskStart.plusMinutes((long) (timeslot.getDuration() * 60));
+                        taskEnd = taskStart.plusMinutes((timeslot.getDuration() * 60L));
                     }
                     LocalDateTime maintenanceStart = LocalDateTime.of(maintenance.getDate(),
                             maintenance.getStartTime() != null ? maintenance.getStartTime() : LocalTime.MIN);
@@ -308,29 +378,61 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
     private Constraint sameDayOrderProcedureMachineConflict(ConstraintFactory constraintFactory) {
         return constraintFactory.forEachUniquePair(Timeslot.class)
                 .filter((timeslot1, timeslot2) -> {
-                    // 确保两个时间槽都有有效的订单、工序、工作中心和开始时间
-                    if (timeslot1.getOrder() == null || timeslot2.getOrder() == null
-                            || timeslot1.getProcedure() == null || timeslot2.getProcedure() == null
-                            || timeslot1.getWorkCenter() == null || timeslot2.getWorkCenter() == null
-                            || timeslot1.getStartTime() == null || timeslot2.getStartTime() == null) {
+                    // 使用局部变量避免多次访问对象属性，确保线程安全
+                    if (timeslot1 == null || timeslot2 == null) {
                         return false;
                     }
                     
-                    // 检查是否为同天、同订单、同工序、同机器
-                    boolean sameDay = timeslot1.getStartTime().toLocalDate().equals(timeslot2.getStartTime().toLocalDate());
-                    boolean sameOrder = timeslot1.getOrder().getOrderNo().equals(timeslot2.getOrder().getOrderNo());
-                    boolean sameProcedure = timeslot1.getProcedure().getId().equals(timeslot2.getProcedure().getId());
-                    boolean sameMachine = timeslot1.getWorkCenter().getId().equals(timeslot2.getWorkCenter().getId());
+                    // 原子获取属性值，避免多线程访问中的不一致性
+                    Order order1 = timeslot1.getOrder();
+                    Order order2 = timeslot2.getOrder();
+                    Procedure procedure1 = timeslot1.getProcedure();
+                    Procedure procedure2 = timeslot2.getProcedure();
+                    WorkCenter workCenter1 = timeslot1.getWorkCenter();
+                    WorkCenter workCenter2 = timeslot2.getWorkCenter();
+                    LocalDateTime startTime1 = timeslot1.getStartTime();
+                    LocalDateTime startTime2 = timeslot2.getStartTime();
                     
-                    // 检查时间是否重叠
-                    LocalDateTime end1 = timeslot1.getEndTime() != null ? timeslot1.getEndTime() : timeslot1.getStartTime().plusMinutes((long) (timeslot1.getDuration() * 60));
-                    LocalDateTime end2 = timeslot2.getEndTime() != null ? timeslot2.getEndTime() : timeslot2.getStartTime().plusMinutes((long) (timeslot2.getDuration() * 60));
-                    boolean timeOverlap = !(timeslot1.getStartTime().isAfter(end2) || timeslot2.getStartTime().isAfter(end1));
+                    // 快速排除空值情况
+                    if (order1 == null || order2 == null || procedure1 == null || procedure2 == null ||
+                            workCenter1 == null || workCenter2 == null || startTime1 == null || startTime2 == null) {
+                        return false;
+                    }
+                    
+                    // 获取具体的ID值
+                    String orderNo1 = order1.getOrderNo();
+                    String orderNo2 = order2.getOrderNo();
+                    String procedureId1 = procedure1.getId();
+                    String procedureId2 = procedure2.getId();
+                    String workCenterId1 = workCenter1.getId();
+                    String workCenterId2 = workCenter2.getId();
+                    
+                    // 快速检查是否相同
+                    boolean sameOrder = orderNo1 != null && orderNo2 != null && orderNo1.equals(orderNo2);
+                    boolean sameProcedure = procedureId1 != null && procedureId2 != null && procedureId1.equals(procedureId2);
+                    boolean sameMachine = workCenterId1 != null && workCenterId2 != null && workCenterId1.equals(workCenterId2);
+                    boolean sameDay = startTime1.toLocalDate().equals(startTime2.toLocalDate());
 
-                    // 条件：同天、同订单、同工序、同机器，且时间重叠
-                    return sameDay && sameOrder && sameProcedure && sameMachine && timeOverlap;
+                    // 如果满足所有条件，检查是否有时间重叠
+                    if (sameOrder && sameProcedure && sameMachine && sameDay) {
+                        // 使用局部变量计算结束时间，避免多次访问
+                        // 由于double不能为null，直接获取值
+                        double duration1 = timeslot1.getDuration();
+                        double duration2 = timeslot2.getDuration();
+                        LocalDateTime end1 = timeslot1.getEndTime() != null ? timeslot1.getEndTime() : startTime1.plusMinutes((long) (duration1 * 60));
+                        LocalDateTime end2 = timeslot2.getEndTime() != null ? timeslot2.getEndTime() : startTime2.plusMinutes((long) (duration2 * 60));
+                        boolean timeOverlap = !(startTime1.isAfter(end2) || startTime2.isAfter(end1));
+                        return timeOverlap;
+                    }
+
+                    return false;
                 })
                 .penalize(HardSoftScore.ONE_HARD, (timeslot1, timeslot2) -> {
+                    // 使用局部变量避免多次访问对象属性
+                    if (timeslot1 == null || timeslot2 == null) {
+                        return 1; // 保持原逻辑，硬约束固定惩罚
+                    }
+                    
                     // 对于硬约束，只要有重叠就给予固定惩罚
                     return 1;
                 })
@@ -366,12 +468,12 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     // 确保工作中心可用且有容量信息
                     return maintenance.getWorkCenter().getId().equals(timeslot.getWorkCenter().getId())
                             && maintenance.getStatus() != null && maintenance.getStatus().equals("y")
-                            && maintenance.getCapacity() != null && maintenance.getCapacity().doubleValue() > 0.0;
+                            && maintenance.getCapacity() > 0;
                 })
                 .groupBy((timeslot, maintenance) -> new WorkCenterUtilizationKey(
                         timeslot.getWorkCenter().getId(),
                         timeslot.getStartTime().toLocalDate(),
-                        maintenance.getCapacity().doubleValue()
+                        maintenance.getCapacity()
                 ), ConstraintCollectors.sum((timeslot, maintenance) ->
                         (int) (timeslot.getDuration() * 60) // 转换为分钟
                 ))
@@ -421,12 +523,26 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
      */
     private Constraint minimizeMakespan(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getStartTime() != null)
+                // 使用局部变量避免多次访问对象属性
+                .filter(timeslot -> {
+                    if (timeslot == null) {
+                        return false;
+                    }
+                    return timeslot.getStartTime() != null;
+                })
                 // 惩罚每个任务的开始时间，鼓励尽早开始
                 .penalize(HardSoftScore.ONE_SOFT,
                         timeslot -> {
+                            // 使用局部变量副本，避免多线程访问中的不一致性
+                            if (timeslot == null) {
+                                return 0;
+                            }
                             LocalDateTime now = LocalDateTime.now();
                             LocalDateTime taskStartTime = timeslot.getStartTime();
+                            // 防御性检查
+                            if (taskStartTime == null) {
+                                return 0;
+                            }
                             // 计算从当前时间到任务开始时间的分钟数
                             long delayMinutes = ChronoUnit.MINUTES.between(now, taskStartTime);
                             // 如果任务已经开始或为过去时间，不给予惩罚
@@ -473,7 +589,6 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     // 确保两个时间槽属于同一工序且有有效的开始时间和索引
                     return timeslot1.getProcedure() != null && timeslot2.getProcedure() != null
                             && timeslot1.getStartTime() != null && timeslot2.getStartTime() != null
-                            && timeslot1.getIndex() != null && timeslot2.getIndex() != null
                             && timeslot1.getProcedure().getId().equals(timeslot2.getProcedure().getId())
                             && timeslot2.getIndex() == timeslot1.getIndex() + 1;
                 })
@@ -481,7 +596,9 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     // 计算timeslot1的结束时间
                     LocalDateTime endTime1 = timeslot1.getEndTime();
                     if (endTime1 == null) {
-                        endTime1 = timeslot1.getStartTime().plusDays(1).minusMinutes(1);
+                        // 使用持续时间计算结束时间，避免使用固定一天的默认值
+                        int duration = timeslot1.getDuration();
+                        endTime1 = timeslot1.getStartTime().plusMinutes(duration );
                     }
 
                     // 只有当endTime1在startTime2之前时才计算间隔
@@ -493,8 +610,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider {
                     } else {
                         return 0;
                     }
-
-                })
-                .asConstraint("Procedure slice prefer continuous");
+                  })
+                  .asConstraint("Procedure slice prefer continuous");
     }
 }

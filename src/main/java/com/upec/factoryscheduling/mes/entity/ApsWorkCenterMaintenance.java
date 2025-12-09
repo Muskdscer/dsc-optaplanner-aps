@@ -18,7 +18,7 @@ public class ApsWorkCenterMaintenance {
     private String localDate;
 
     @Column(name = "CAPACITY", nullable = false)
-    private Long capacity;
+    private int capacity;
 
     @Column(name = "STATUS", nullable = false, length = 20)
     private String status;
@@ -57,11 +57,11 @@ public class ApsWorkCenterMaintenance {
         this.localDate = localDate;
     }
 
-    public Long getCapacity() {
+    public int getCapacity() {
         return capacity;
     }
 
-    public void setCapacity(Long capacity) {
+    public void setCapacity(int capacity) {
         this.capacity = capacity;
     }
 
