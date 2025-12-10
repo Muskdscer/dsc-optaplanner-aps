@@ -1,7 +1,6 @@
 package com.upec.factoryscheduling.aps.service;
 
 import com.upec.factoryscheduling.aps.entity.*;
-import com.upec.factoryscheduling.aps.repository.TimeslotRepository;
 import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import com.xkzhangsan.time.calculator.DateTimeCalculatorUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -11,13 +10,11 @@ import org.optaplanner.core.api.solver.SolutionManager;
 import org.optaplanner.core.api.solver.SolverJob;
 import org.optaplanner.core.api.solver.SolverManager;
 import org.optaplanner.core.api.solver.SolverStatus;
-import org.optaplanner.core.config.solver.SolverConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -242,6 +239,7 @@ public class SchedulingService {
             // 查找与订单相关的所有时间槽并设置问题ID
             timeslots = timeslotService.findAllByOrderIn(orders).stream()
                     .peek(timeslot -> timeslot.setProblemId(problemId))
+                    .filter(timeslot -> timeslot.getWorkCenter()!=null)
                     .collect(Collectors.toList());
         }
         // 获取设备维护计划
@@ -279,7 +277,7 @@ public class SchedulingService {
         FactorySchedulingSolution solution = loadProblem(orderNos, problemId);
 
         // 如果有时间槽数据，对分片数据进行额外处理
-        if (solution != null && !CollectionUtils.isEmpty(solution.getTimeslots())) {
+        if (!CollectionUtils.isEmpty(solution.getTimeslots())) {
             // 按工序ID和分片索引对时间槽进行排序，确保分片顺序正确
             List<Timeslot> sortedTimeslots = solution.getTimeslots().stream()
                     .sorted((t1, t2) -> {

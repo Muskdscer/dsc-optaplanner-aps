@@ -55,7 +55,7 @@ public class OptaPlannerConfig {
         
         // 多线程配置 - 启用并行移动生成和评估
         // 使用自动设置以充分利用多核CPU
-        solverConfig.setMoveThreadCount(MOVE_THREAD_COUNT_AUTO);
+//        solverConfig.setMoveThreadCount(MOVE_THREAD_COUNT_AUTO);
         
         // 增加移动线程缓冲区大小以减少线程间竞争
         solverConfig.setMoveThreadBufferSize(1024);

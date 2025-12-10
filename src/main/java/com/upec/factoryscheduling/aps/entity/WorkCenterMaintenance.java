@@ -42,32 +42,28 @@ public class WorkCenterMaintenance implements Serializable {
      * 检查是否还有可用容量
      */
     public synchronized boolean hasAvailableCapacity() {
-        int capacity = this.capacity;
-        int usage = this.usageTime;
-        return usage < capacity;
+        return this.capacity >= this.usageTime;
     }
 
     /**
      * 获取剩余可用容量
      */
     public synchronized int getRemainingCapacity() {
-        int capacity = this.capacity;
-        int usage = this.usageTime;
-        return capacity - usage;
+        return this.capacity - this.usageTime;
     }
 
     /**
      * 累加使用时间 - 线程安全
      */
     public synchronized void addUsageTime(int duration) {
-        this.usageTime += duration;
+        this.usageTime = this.usageTime + duration;
     }
 
     /**
      * 减少使用时间 - 线程安全
      */
     public synchronized void subtractUsageTime(int duration) {
-    this.usageTime -= duration;
+        this.usageTime = this.usageTime - duration;
     }
 
     public WorkCenterMaintenance() {

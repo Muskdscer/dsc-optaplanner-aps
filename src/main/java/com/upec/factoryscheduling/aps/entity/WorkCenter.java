@@ -1,6 +1,5 @@
 package com.upec.factoryscheduling.aps.entity;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import org.optaplanner.core.api.domain.lookup.PlanningId;

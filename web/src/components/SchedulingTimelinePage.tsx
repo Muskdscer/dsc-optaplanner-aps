@@ -29,11 +29,11 @@ const SchedulingTimelinePage: React.FC = () => {
         <p><strong>工作中心：</strong>{workCenter?.name || '未知'}</p>
         <p><strong>开始时间：</strong>{startTime || '未知'}</p>
         <p><strong>结束时间：</strong>{endTime || '未知'}</p>
-        <p><strong>持续时间：</strong>{durationHours} 小时</p>
+        <p><strong>持续时间：</strong>{durationHours} 分钟</p>
         <p><strong>工序状态：</strong>{procedure?.status || '未知'}</p>
         <p><strong>工序序号：</strong>{procedure?.procedureNo || '未知'}</p>
         {procedure?.parallel && <p><strong>并行工序：</strong>是</p>}
-        <p><strong>机器工时：</strong>{procedure?.machineHours || 0} 小时</p>
+        <p><strong>机器工时：</strong>{procedure?.machineMinutes || 0} 分钟</p>
       </div>
     );
   };
