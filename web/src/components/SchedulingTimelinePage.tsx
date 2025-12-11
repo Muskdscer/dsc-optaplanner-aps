@@ -1,0 +1,297 @@
+import React, { useEffect, useState } from 'react';
+import { Table, Card, Spin, message, Tag, Tooltip } from 'antd';
+import type { ColumnType } from 'antd/es/table';
+import { getTimeslotList } from '../services/api';
+import type { Timeslot, Procedure } from '../services/model';
+
+interface TaskData {
+  [key: string]: { timeslots: Timeslot[]; dateMap: Map<string, Timeslot[]> };
+}
+
+interface TableData {
+  key: string;
+  taskNo: string;
+  [dateKey: string]: string | Timeslot[] | undefined;
+}
+
+const SchedulingTimelinePage: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [tableData, setTableData] = useState<TableData[]>([]);
+  const [dateColumns, setDateColumns] = useState<string[]>([]);
+
+  // 格式化工序详情
+  const formatProcedureDetail = (timeslot: Timeslot) => {
+    const { procedure, workCenter, startTime, endTime, duration } = timeslot;
+    const durationHours = duration ? Number((duration).toFixed(2)) : 0;
+    return (
+      <div style={{ fontSize: '12px', lineHeight: '1.5' }}>
+        <p><strong>工序名称：</strong>{procedure?.procedureName || '未知'}（{procedure?.procedureNo || '未知'}）</p>
+        <p><strong>工作中心：</strong>{workCenter?.name || '未知'}</p>
+        <p><strong>开始时间：</strong>{startTime || '未知'}</p>
+        <p><strong>结束时间：</strong>{endTime || '未知'}</p>
+        <p><strong>持续时间：</strong>{durationHours} 分钟</p>
+        <p><strong>工序状态：</strong>{procedure?.status || '未知'}</p>
+        <p><strong>工序序号：</strong>{procedure?.procedureNo || '未知'}</p>
+        {procedure?.parallel && <p><strong>并行工序：</strong>是</p>}
+        <p><strong>机器工时：</strong>{procedure?.machineMinutes || 0} 分钟</p>
+      </div>
+    );
+  };
+
+  // 为工序分配颜色，确保nextProcedureNo中下一道工序的背景颜色相同
+  const getProcedureColor = (procedure: Procedure | undefined) => {
+    // 只有并行工序显示背景颜色，其他工序使用默认颜色
+    if (!procedure || !procedure.parallel) {
+      return '#f5f5f5'; // 非并行工序使用默认背景色，不突出显示
+    }
+    
+    // 为不同的并行工序组分配不同的颜色
+    const colors = [
+      '#e6f7ff', // 浅蓝色
+      '#f6ffed', // 浅绿色
+      '#fff7e6', // 浅黄色
+      '#fff1f0', // 浅红色
+      '#f9f0ff', // 浅紫色
+      '#e6fffb', // 浅青色
+      '#fffbe6', // 浅金色
+      '#f0f5ff'  // 浅蓝紫色
+    ];
+    
+    // 使用工序号的十位数字作为颜色分配的依据
+    // 这样可以确保同一组的并行工序（如50和60，它们的十位都是5）有相同的颜色
+    const tensDigit = Math.floor(procedure.procedureNo / 10);
+    const index = tensDigit % colors.length;
+    return colors[index];
+  };
+
+  // 渲染单元格内容
+  const renderCellContent = (timeslots?: Timeslot[]) => {
+    if (!timeslots || timeslots.length === 0) {
+      return <div style={{ textAlign: 'center', padding: '8px', color: '#999' }}>未安排</div>;
+    }
+    
+    return (
+      <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        {timeslots.map((ts) => {
+          const baseBgColor = getProcedureColor(ts.procedure);
+          return (
+            <Tooltip 
+              key={ts.id}
+              title={formatProcedureDetail(ts)}
+              placement="topLeft"
+              mouseEnterDelay={1} // 1秒后显示
+              overlayStyle={{ 
+                maxWidth: '300px', 
+                padding: '10px',
+                borderRadius: '6px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+              }}
+            >
+              <div 
+                style={{ 
+                  padding: '4px', 
+                  background: baseBgColor, 
+                  borderRadius: '4px',
+                  border: '1px solid #e8e8e8',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  // 添加悬停效果
+                  e.currentTarget.style.background = '#e6f7ff';
+                  e.currentTarget.style.borderColor = '#91d5ff';
+                }}
+                onMouseOut={(e) => {
+                  // 移除悬停效果
+                  e.currentTarget.style.background = baseBgColor;
+                  e.currentTarget.style.borderColor = '#e8e8e8';
+                }}
+              >
+                <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '2px' }}>
+                  {ts.procedure?.procedureName || '未知'}（{ts.procedure?.procedureNo || '未知'}）
+                </div>
+                {/*<div style={{ color: '#666', fontSize: '10px' }}>*/}
+                {/*  {ts.startTime?.substring(11, 16)} - {ts.endTime?.substring(11, 16)}*/}
+                {/*</div>*/}
+                <div style={{ marginTop: '2px' }}>
+                  <Tag 
+                    color={
+                      ts.procedure?.status === '执行中' ? 'blue' :
+                      ts.procedure?.status === '执行完成' ? 'green' :
+                      ts.procedure?.status === '待执行' ? 'orange' : 'yellow'
+                    }>
+                    {ts.procedure?.status || '未知'}
+                  </Tag>
+                </div>
+              </div>
+            </Tooltip>
+          );
+        })}
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    // 根据任务号分组数据
+    const groupTimeslotsByTask = (timeslots: Timeslot[]): TaskData => {
+      return timeslots.reduce((acc, timeslot) => {
+        // 空值检查
+        if (!timeslot.task || !timeslot.procedure || !timeslot.startTime) {
+          return acc;
+        }
+        
+        const key = timeslot.task.taskNo;
+        if (!acc[key]) {
+          acc[key] = { timeslots: [], dateMap: new Map() };
+        }
+        acc[key].timeslots.push(timeslot);
+        
+        // 按日期分组时间槽
+        const date = timeslot.startTime.substring(0, 10);
+        if (!acc[key].dateMap.has(date)) {
+          acc[key].dateMap.set(date, []);
+        }
+        acc[key].dateMap.get(date)?.push(timeslot);
+        
+        return acc;
+      }, {} as TaskData);
+    };
+
+    // 提取所有日期
+    const extractDates = (timeslots: Timeslot[]): string[] => {
+      const dateSet = new Set<string>();
+      
+      timeslots.forEach(timeslot => {
+        if (timeslot.startTime) {
+          const date = timeslot.startTime.substring(0, 10);
+          dateSet.add(date);
+        }
+      });
+      
+      // 按日期排序
+      return Array.from(dateSet).sort();
+    };
+
+    // 构建表格数据
+    const buildTableData = (groupedData: TaskData, dates: string[]): TableData[] => {
+      return Object.entries(groupedData).map(([, data]) => {
+        // 从第一个timeslot中直接获取taskNo
+        const firstTimeslot = data.timeslots[0];
+        const taskNo = firstTimeslot?.task?.taskNo || '';
+        const row: TableData = {
+          key: taskNo, // 将任务号作为key
+          taskNo
+        };
+        
+        // 为每个日期添加列数据
+        dates.forEach(date => {
+          const dayTimeslots = data.dateMap.get(date) || [];
+          row[date] = dayTimeslots;
+        });
+        
+        return row;
+      });
+    };
+
+    // 获取数据并预处理
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const response = await getTimeslotList();
+        // 使用类型断言处理响应
+        const apiResponse = response as unknown as { code: number; msg: string; data: { timeslots: Timeslot[] } };
+        if (apiResponse.code === 200) {
+          const timeslots = apiResponse.data.timeslots;
+          // 按订单号和任务号分组数据
+          const grouped = groupTimeslotsByTask(timeslots);
+          // 提取所有日期
+          const dates = extractDates(timeslots);
+          setDateColumns(dates);
+          // 构建表格数据
+          const table = buildTableData(grouped, dates);
+          setTableData(table);
+        } else {
+          message.error('获取数据失败: ' + apiResponse.msg);
+        }
+      } catch (error) {
+        message.error('网络请求失败');
+        console.error('Fetch error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // 格式化日期显示
+  const formatDate = (dateStr: string) => {
+    // 将YYYY-MM-DD格式转换为更友好的显示
+    const date = new Date(dateStr);
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${month}月${day}日`;
+  };
+
+  // 动态生成表格列
+  const generateColumns = () => {
+    const columns: ColumnType<TableData>[] = [
+      {
+        title: '任务号',
+        dataIndex: 'taskNo',
+        key: 'taskNo',
+        width: 200,
+        fixed: 'left' as const,
+        align: 'center' as const,
+        ellipsis: true,
+        render: (text: string) => (
+          <div style={{ fontWeight: 'bold', color: '#1890ff' }}>{text}</div>
+        )
+      },
+    ];
+
+    // 添加日期列
+    dateColumns.forEach(date => {
+      columns.push({
+        title: formatDate(date),
+        dataIndex: date,
+        key: date,
+        width: 180,
+        align: 'center' as const,
+        render: (timeslots: Timeslot[]) => renderCellContent(timeslots),
+        className: 'date-column'
+      });
+    });
+
+    return columns;
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1 style={{ marginBottom: '20px', fontSize: '20px', color: '#262626' }}>生产调度时序表</h1>
+      <Spin spinning={loading}>
+        <Card>
+          <Table
+            columns={generateColumns()}
+            dataSource={tableData}
+            scroll={{ x: 'max-content', y: 600 }}
+            pagination={false}
+            size="middle"
+            bordered
+            rowKey="key"
+            className="scheduling-timeline-table"
+            style={{ borderCollapse: 'collapse' }}
+          />
+        </Card>
+        {!loading && tableData.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '50px', color: '#999', fontSize: '16px' }}>
+            暂无调度数据
+          </div>
+        )}
+      </Spin>
+    </div>
+  );
+};
+
+export default SchedulingTimelinePage;

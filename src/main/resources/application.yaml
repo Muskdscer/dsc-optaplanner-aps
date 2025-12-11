@@ -1,0 +1,77 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  datasource:
+    h2:
+      driver-class-name: org.h2.Driver
+      username: sa
+      jdbc-url: jdbc:h2:mem:test
+#    oracle:  # 禁用Oracle配置，但保留配置信息
+#      driver-class-name: oracle.jdbc.OracleDriver
+#      jdbc-url: jdbc:oracle:thin:@172.17.72.222:1521:cjmmes
+#      username: mes
+#      password: Cjmmes2021
+#      pool-name: oracle-pool-1
+#      minimum-idle: 5
+#      maximum-pool-size: 20
+#      connection-timeout: 30000
+#      idle-timeout: 600000
+#      max-lifetime: 1800000
+#      leak-detection-threshold: 60000
+#      initialization-fail-timeout: 1
+    mysql:  # 添加MySQL配置
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      jdbc-url: jdbc:mysql://localhost:3306/MES?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      username: root
+      password: 123456
+      pool-name: mysql-pool-1
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+server:
+  port: 8082
+
+# JWT 配置
+jwt:
+  secret: "tWgVv0IDPl9WP24e17lbDkuMoqUwSPhTKcTz+VnylztDI+gERCeOQiu0p+Cc3z/ohceEED6d8vQDJVgmS4e1sw=="  # 在生产环境中请修改为强密钥
+  expiration: 986400000  # 24小时，单位毫秒
+  issuer: aps-system  # 签发者
+optaplanner:
+  solver:
+    # 终止条件
+    termination:
+      # 总体时间限制
+      spent-limit: ${SOLVER_TIME_LIMIT:2m}
+      # 最佳分数限制
+      best-score-limit: "0hard/0soft"
+      # 无改进时间限制
+      unimproved-spent-limit: 2m
+
+
+
+logging:
+  file:
+    name: logs/app.log
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_FILE}.%d{yyyy-MM-dd}.%i.gz
+      max-file-size: 50MB
+      max-history: 60
+  level:
+    root: INFO
+    com.zaxxer.hikari: INFO
+    org.springframework.web: DEBUG
+    org.quartz.core.QuartzScheduler: DEBUG
+  pattern:
+    console: "%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"

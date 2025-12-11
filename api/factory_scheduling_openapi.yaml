@@ -1,0 +1,1128 @@
+openapi: 3.0.0
+info:
+  title: 工厂调度系统API
+  description: 工厂调度系统的REST API接口文档，基于OptaPlanner实现的高级排程系统
+  version: 1.0.0
+  contact:
+    name: 系统开发团队
+    email: support@example.com
+
+servers:
+  - url: http://localhost:8080
+    description: 开发环境服务器
+
+paths:
+  # 调度管理相关接口
+  /api/scheduling/solve/{problemId}:
+    post:
+      summary: 启动调度求解
+      description: 根据指定的问题ID和订单编号列表开始调度优化过程，触发OptaPlanner求解器进行排程计算。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，用于唯一标识本次调度任务
+      requestBody:
+        description: 需要参与调度的订单编号列表
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+              example: ["ORDER001", "ORDER002", "ORDER003"]
+      responses:
+        '200':
+          description: 调度启动成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseString'
+
+  /api/scheduling/stop/{problemId}:
+    post:
+      summary: 停止调度求解
+      description: 停止指定问题ID的调度求解过程，释放计算资源。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，指定要停止的调度任务
+      responses:
+        '200':
+          description: 调度停止成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseString'
+
+  /api/scheduling/solution/{problemId}:
+    get:
+      summary: 获取最佳解决方案
+      description: 获取指定问题ID的当前最佳调度解决方案，包含所有已优化的时间槽安排。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，指定要获取解决方案的调度任务
+      responses:
+        '200':
+          description: 获取解决方案成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/scheduling/score/{problemId}:
+    get:
+      summary: 获取解决方案评分
+      description: 获取指定问题ID的当前最佳解决方案的评分，包括硬约束和软约束的评估结果。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，指定要获取评分的调度任务
+      responses:
+        '200':
+          description: 获取评分成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseHardSoftScore'
+
+  /api/scheduling/status/{problemId}:
+    get:
+      summary: 获取求解状态
+      description: 获取指定问题ID的当前调度任务的求解状态，如正在求解、已完成、未开始等。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，指定要查询状态的调度任务
+      responses:
+        '200':
+          description: 获取状态成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseString'
+
+  /api/scheduling/feasible/{problemId}:
+    get:
+      summary: 检查解决方案是否可行
+      description: 判断指定问题ID的当前最佳解决方案是否满足所有硬约束条件，即是否为可行解。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，指定要检查可行性的调度任务
+      responses:
+        '200':
+          description: 获取可行性结果成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseBoolean'
+
+  /api/scheduling/update/{problemId}:
+    put:
+      summary: 更新调度问题
+      description: 使用新的解决方案数据更新指定问题ID的调度任务，通常用于手动调整后的重新优化。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，指定要更新的调度任务
+      requestBody:
+        description: 更新后的解决方案数据
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySchedulingSolution'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseString'
+
+  /api/scheduling/explain/{problemId}:
+    get:
+      summary: 获取解决方案详细解释
+      description: 获取指定问题ID的当前最佳解决方案的详细评分解释，包括各约束条件的贡献和违反情况。
+      tags:
+        - 调度管理
+      parameters:
+        - name: problemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 问题ID，指定要获取解释的调度任务
+      responses:
+        '200':
+          description: 获取解释成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/scheduling/update:
+    post:
+      summary: 更新时间槽
+      description: 根据请求数据更新指定的时间槽信息，通常用于手动调整特定工序的安排。
+      tags:
+        - 调度管理
+      requestBody:
+        description: 包含更新信息的工序请求
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedureRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTimeslot'
+
+  /api/scheduling/deleteAll:
+    get:
+      summary: 删除所有调度数据
+      description: 删除系统中的所有调度相关数据，通常用于测试或重置环境。
+      tags:
+        - 调度管理
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseString'
+
+  /api/scheduling/validation:
+    post:
+      summary: 验证解决方案
+      description: 验证传入的解决方案是否满足约束条件，并返回验证后的结果。
+      tags:
+        - 调度管理
+      requestBody:
+        description: 要验证的解决方案
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySchedulingSolution'
+      responses:
+        '200':
+          description: 验证成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/scheduling/receiveTimeslot:
+    post:
+      summary: 接收时间槽数据
+      description: 接收并处理传入的时间槽列表数据。
+      tags:
+        - 调度管理
+      requestBody:
+        description: 要处理的时间槽列表
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Timeslot'
+      responses:
+        '200':
+          description: 处理成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTimeslotList'
+
+  # 设备管理相关接口
+  /api/machines:
+    get:
+      summary: 获取所有工作中心
+      description: 查询系统中所有可用的工作中心（设备/机器）列表。
+      tags:
+        - 设备管理
+      responses:
+        '200':
+          description: 获取工作中心列表成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWorkCenterList'
+    post:
+      summary: 创建工作中心
+      description: 批量创建新的工作中心（设备/机器）记录。
+      tags:
+        - 设备管理
+      requestBody:
+        description: 工作中心对象列表
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/WorkCenter'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWorkCenterList'
+
+  /api/machines/{id}:
+    get:
+      summary: 根据ID获取工作中心
+      description: 根据指定的ID查询特定的工作中心（设备/机器）信息。
+      tags:
+        - 设备管理
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 工作中心ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWorkCenter'
+        '404':
+          description: 未找到指定ID的工作中心
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+    put:
+      summary: 更新工作中心
+      description: 根据指定的ID更新工作中心（设备/机器）的信息。
+      tags:
+        - 设备管理
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 工作中心ID
+      requestBody:
+        description: 工作中心对象，包含更新信息
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkCenter'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWorkCenter'
+    delete:
+      summary: 删除工作中心
+      description: 根据指定的ID删除工作中心（设备/机器）记录。
+      tags:
+        - 设备管理
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 工作中心ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+
+  # 订单管理相关接口
+  /api/orders:
+    get:
+      summary: 获取所有订单
+      description: 查询系统中所有的订单列表。
+      tags:
+        - 订单管理
+      responses:
+        '200':
+          description: 获取订单列表成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseOrderList'
+    post:
+      summary: 创建订单
+      description: 批量创建新的订单记录。
+      tags:
+        - 订单管理
+      requestBody:
+        description: 订单对象列表
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Order'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseOrderList'
+
+  /api/orders/{id}:
+    get:
+      summary: 根据ID获取订单
+      description: 根据指定的ID查询特定的订单信息。
+      tags:
+        - 订单管理
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 订单ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseOrder'
+        '404':
+          description: 未找到指定ID的订单
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+    delete:
+      summary: 删除订单
+      description: 根据指定的ID删除订单记录。
+      tags:
+        - 订单管理
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 订单ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+
+  # 设备维护相关接口
+  /api/maintenance/auto:
+    post:
+      summary: 自动生成所有设备的维护计划
+      description: 为系统中的所有工作中心（设备）自动生成未来30天的维护计划。
+      tags:
+        - 维护管理
+      responses:
+        '200':
+          description: 生成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWorkCenterMaintenanceList'
+
+  /api/maintenance/all:
+    post:
+      summary: 批量创建或更新维护计划
+      description: 批量保存或更新维护计划列表，根据日期检查记录是否已存在。
+      tags:
+        - 维护管理
+      requestBody:
+        description: 维护计划对象列表
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/WorkCenterMaintenance'
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+
+  /api/maintenance/updateAll:
+    post:
+      summary: 批量更新维护计划
+      description: 批量更新维护计划列表中的记录，包括状态、时间和容量等信息。
+      tags:
+        - 维护管理
+      requestBody:
+        description: 维护计划对象列表，包含更新信息
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/WorkCenterMaintenance'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWorkCenterMaintenanceList'
+
+  # 工序管理相关接口
+  /api/procedure:
+    post:
+      summary: 创建工序
+      description: 批量创建新的工序记录。
+      tags:
+        - 工序管理
+      requestBody:
+        description: 工序对象列表
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Procedure'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTimeslotList'
+
+  /api/procedure/list:
+    post:
+      summary: 创建工序（备用接口）
+      description: 批量创建新的工序记录。
+      tags:
+        - 工序管理
+      requestBody:
+        description: 工序对象列表
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Procedure'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseTimeslotList'
+
+  # 工作日历管理相关接口
+  /api/work-calendar/create-all:
+    post:
+      summary: 为所有工作中心批量创建工作日历
+      description: 此接口根据指定的日期范围，为系统中的所有工作中心统一创建工作日历数据。
+      tags:
+        - 工作日历管理
+      requestBody:
+        description: 包含开始日期和结束日期的请求对象
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkCalendarRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWorkCalendarResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+
+components:
+  schemas:
+    # 通用响应结构
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: object
+          description: 响应数据
+        rows:
+          type: object
+          description: 分页数据（备用字段）
+        reqId:
+          type: string
+          description: 请求ID
+        total:
+          type: integer
+          description: 数据总量
+
+    ApiResponseVoid:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        reqId:
+          type: string
+          description: 请求ID
+
+    ApiResponseString:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: string
+          description: 字符串数据
+        reqId:
+          type: string
+          description: 请求ID
+
+    ApiResponseBoolean:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: boolean
+          description: 布尔值数据
+        reqId:
+          type: string
+          description: 请求ID
+
+    ApiResponseError:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 错误状态码
+        msg:
+          type: string
+          description: 错误消息
+        reqId:
+          type: string
+          description: 请求ID
+
+    ApiResponseHardSoftScore:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: object
+          properties:
+            hardScore:
+              type: integer
+              description: 硬约束评分
+            softScore:
+              type: integer
+              description: 软约束评分
+        reqId:
+          type: string
+          description: 请求ID
+
+    # 工作中心相关
+    WorkCenter:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 工作中心ID
+        workCenterCode:
+          type: string
+          description: 工作中心编码
+        name:
+          type: string
+          description: 工作中心名称
+        status:
+          type: string
+          description: 工作中心状态
+
+    ApiResponseWorkCenter:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          $ref: '#/components/schemas/WorkCenter'
+        reqId:
+          type: string
+          description: 请求ID
+
+    ApiResponseWorkCenterList:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkCenter'
+        total:
+          type: integer
+          description: 数据总量
+        reqId:
+          type: string
+          description: 请求ID
+
+    # 订单相关
+    Order:
+      type: object
+      properties:
+        orderNo:
+          type: string
+          description: 订单编号（主键）
+        erpStatus:
+          type: string
+          description: ERP系统状态
+        orderStatus:
+          type: string
+          description: 订单状态
+        planStartDate:
+          type: string
+          format: date
+          description: 计划开始日期
+        planEndDate:
+          type: string
+          format: date
+          description: 计划结束日期
+        factStartDate:
+          type: string
+          format: date-time
+          description: 实际开始日期时间
+        factEndDate:
+          type: string
+          format: date-time
+          description: 实际结束日期时间
+
+    ApiResponseOrder:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          $ref: '#/components/schemas/Order'
+        reqId:
+          type: string
+          description: 请求ID
+
+    ApiResponseOrderList:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        total:
+          type: integer
+          description: 数据总量
+        reqId:
+          type: string
+          description: 请求ID
+
+    # 工序相关
+    Procedure:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 工序ID
+        taskNo:
+          type: string
+          description: 任务编号
+        orderNo:
+          type: string
+          description: 订单编号
+        workCenterId:
+          $ref: '#/components/schemas/WorkCenter'
+          description: 工作中心ID
+        procedureName:
+          type: string
+          description: 工序名称
+        procedureNo:
+          type: integer
+          description: 工序编号
+        machineHours:
+          type: number
+          format: double
+          description: 机器工时
+        nextProcedureNo:
+          type: array
+          items:
+            type: integer
+          description: 下一道工序编号列表
+        nextProcedure:
+          type: array
+          items:
+            $ref: '#/components/schemas/Procedure'
+          description: 下一道工序对象列表
+        startTime:
+          type: string
+          format: date-time
+          description: 开始时间
+        endTime:
+          type: string
+          format: date-time
+          description: 结束时间
+        planStartDate:
+          type: string
+          format: date
+          description: 计划开始日期
+        planEndDate:
+          type: string
+          format: date
+          description: 计划结束日期
+        status:
+          type: string
+          description: 状态
+        isParallel:
+          type: boolean
+          description: 是否并行
+
+    # 时间槽相关
+    Timeslot:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 时间槽ID
+        problemId:
+          type: integer
+          format: int64
+          description: 问题ID
+        procedure:
+          $ref: '#/components/schemas/Procedure'
+          description: 工序
+        order:
+          $ref: '#/components/schemas/Order'
+          description: 订单
+        task:
+          type: object
+          description: 任务
+        workCenter:
+          $ref: '#/components/schemas/WorkCenter'
+          description: 工作中心
+        startTime:
+          type: string
+          format: date-time
+          description: 开始时间
+        duration:
+          type: number
+          format: double
+          description: 持续时间（小时）
+        sliceIndex:
+          type: integer
+          description: 分片索引
+        totalSlices:
+          type: integer
+          description: 总分片数量
+        priority:
+          type: integer
+          description: 优先级
+        maintenance:
+          $ref: '#/components/schemas/WorkCenterMaintenance'
+          description: 维护计划
+        endTime:
+          type: string
+          format: date-time
+          description: 结束时间（自动计算）
+        dateTime:
+          type: string
+          format: date-time
+          description: 日期时间
+        isManual:
+          type: boolean
+          description: 是否手动调整
+        procedureOrder:
+          type: integer
+          description: 工序顺序
+
+    ApiResponseTimeslot:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          $ref: '#/components/schemas/Timeslot'
+        reqId:
+          type: string
+          description: 请求ID
+
+    ApiResponseTimeslotList:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Timeslot'
+        total:
+          type: integer
+          description: 数据总量
+        reqId:
+          type: string
+          description: 请求ID
+
+    # 工作中心维护相关
+    WorkCenterMaintenance:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 维护计划ID
+        workCenter:
+          $ref: '#/components/schemas/WorkCenter'
+          description: 工作中心
+        year:
+          type: integer
+          description: 年份
+        date:
+          type: string
+          format: date
+          description: 维护日期
+        capacity:
+          type: integer
+          description: 容量（分钟）
+        status:
+          type: string
+          description: 状态
+        description:
+          type: string
+          description: 描述
+        startTime:
+          type: string
+          format: time
+          description: 开始时间
+        endTime:
+          type: string
+          format: time
+          description: 结束时间
+        usageTime:
+          type: integer
+          description: 使用时间
+
+    ApiResponseWorkCenterMaintenanceList:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkCenterMaintenance'
+        total:
+          type: integer
+          description: 数据总量
+        reqId:
+          type: string
+          description: 请求ID
+
+    # 工作日历相关
+    WorkCalendarRequest:
+      type: object
+      properties:
+        startDate:
+          type: string
+          format: date
+          description: 开始日期
+        endDate:
+          type: string
+          format: date
+          description: 结束日期
+
+    WorkCalendarResponse:
+      type: object
+      properties:
+        totalCreated:
+          type: integer
+          description: 创建的记录总数
+        startDate:
+          type: string
+          format: date
+          description: 开始日期
+        endDate:
+          type: string
+          format: date
+          description: 结束日期
+
+    ApiResponseWorkCalendarResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+        msg:
+          type: string
+          description: 响应消息
+        data:
+          $ref: '#/components/schemas/WorkCalendarResponse'
+        reqId:
+          type: string
+          description: 请求ID
+
+    # 调度相关
+    FactorySchedulingSolution:
+      type: object
+      properties:
+        problemId:
+          type: integer
+          format: int64
+          description: 问题ID
+        timeslots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Timeslot'
+          description: 时间槽列表
+        score:
+          type: object
+          properties:
+            hardScore:
+              type: integer
+              description: 硬约束评分
+            softScore:
+              type: integer
+              description: 软约束评分
+
+    ProcedureRequest:
+      type: object
+      properties:
+        procedureId:
+          type: string
+          description: 工序ID
+        startTime:
+          type: string
+          format: date-time
+          description: 开始时间
+        duration:
+          type: number
+          format: double
+          description: 持续时间
+        workCenterId:
+          type: string
+          description: 工作中心ID
