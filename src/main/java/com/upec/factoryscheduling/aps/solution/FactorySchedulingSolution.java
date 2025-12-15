@@ -10,6 +10,7 @@ import org.optaplanner.core.api.domain.solution.PlanningScore;
 import org.optaplanner.core.api.domain.solution.PlanningSolution;
 import org.optaplanner.core.api.domain.solution.ProblemFactCollectionProperty;
 import org.optaplanner.core.api.domain.valuerange.ValueRangeProvider;
+import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolverStatus;
 
@@ -62,7 +63,7 @@ public class FactorySchedulingSolution implements  Serializable {
      * volatile确保多线程环境下的可见性
      */
     @PlanningScore
-    private volatile HardSoftScore score;
+    private volatile HardMediumSoftScore score;
 
     /**
      * 求解器状态 - 表示当前规划过程的状态
@@ -74,14 +75,14 @@ public class FactorySchedulingSolution implements  Serializable {
     /**
      * 获取规划分数
      */
-    public synchronized HardSoftScore getScore() {
+    public synchronized HardMediumSoftScore getScore() {
         return score;
     }
     
     /**
      * 设置规划分数
      */
-    public synchronized void setScore(HardSoftScore score) {
+    public synchronized void setScore(HardMediumSoftScore score) {
         this.score = score;
     }
     

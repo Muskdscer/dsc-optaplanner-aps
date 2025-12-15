@@ -3,6 +3,7 @@ package com.upec.factoryscheduling.common.configuration;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import com.upec.factoryscheduling.aps.solver.FactorySchedulingConstraintProvider;
+import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolutionManager;
 import org.optaplanner.core.api.solver.SolverManager;
@@ -35,7 +36,7 @@ public class OptaPlannerConfig {
         // 设置终止条件 - 优化以适应多线程环境
         solverConfig.withTerminationConfig(new TerminationConfig()
                 .withSecondsSpentLimit(180L)  // 增加总体时间限制以利用多线程优势
-                .withBestScoreLimit("0hard/0soft")
+                .withBestScoreLimit("0hard/0medium/10000soft")
                 .withUnimprovedSecondsSpentLimit(60L));  // 添加未改进时间限制，避免无效计算
 
         // 配置阶段 - 使用更简单的配置
@@ -51,7 +52,7 @@ public class OptaPlannerConfig {
 
         // 设置环境模式 - 在多线程环境中使用REPRODUCIBLE确保结果可重现
         // 注意：在生产环境中可考虑使用FASTEST，但会牺牲结果可重现性
-        solverConfig.setEnvironmentMode(EnvironmentMode.FAST_ASSERT);
+        solverConfig.setEnvironmentMode(EnvironmentMode.FULL_ASSERT);
         
         // 多线程配置 - 启用并行移动生成和评估
         // 使用自动设置以充分利用多核CPU
@@ -74,7 +75,8 @@ public class OptaPlannerConfig {
     }
 
     @Bean
-    public SolutionManager<FactorySchedulingSolution, HardSoftScore> solutionManager(SolverManager<FactorySchedulingSolution, Long> solverManager) {
+    public SolutionManager<FactorySchedulingSolution, HardMediumSoftScore> solutionManager(SolverManager<FactorySchedulingSolution,
+            Long> solverManager) {
         // 使用SolverManager创建SolutionManager
         return SolutionManager.create(solverManager);
     }

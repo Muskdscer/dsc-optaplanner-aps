@@ -8,6 +8,7 @@ import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import com.upec.factoryscheduling.common.utils.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.score.ScoreExplanation;
+import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolverStatus;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -103,8 +104,8 @@ public class SchedulingController {
      * @return 包含硬软评分的HTTP响应
      */
     @GetMapping("/score/{problemId}")
-    public ApiResponse<HardSoftScore> getScore(@PathVariable Long problemId) {
-        HardSoftScore hardSoftScore = schedulingService.getScore(problemId);
+    public ApiResponse<HardMediumSoftScore> getScore(@PathVariable Long problemId) {
+        HardMediumSoftScore hardSoftScore = schedulingService.getScore(problemId);
         return ApiResponse.success(hardSoftScore);
     }
 
@@ -158,7 +159,7 @@ public class SchedulingController {
      * @return 包含评分解释的HTTP响应，可用于分析调度结果的质量
      */
     @GetMapping("/explain/{problemId}")
-    public ApiResponse<ScoreExplanation<FactorySchedulingSolution, HardSoftScore>> getExplanation(@PathVariable Long problemId) {
+    public ApiResponse<ScoreExplanation<FactorySchedulingSolution, HardMediumSoftScore>> getExplanation(@PathVariable Long problemId) {
         return ApiResponse.success(schedulingService.explainSolution(problemId));
     }
 

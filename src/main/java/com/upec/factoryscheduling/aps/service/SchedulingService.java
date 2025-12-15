@@ -5,6 +5,7 @@ import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import com.xkzhangsan.time.calculator.DateTimeCalculatorUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.score.ScoreExplanation;
+import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
 import org.optaplanner.core.api.score.buildin.hardsoft.HardSoftScore;
 import org.optaplanner.core.api.solver.SolutionManager;
 import org.optaplanner.core.api.solver.SolverJob;
@@ -58,7 +59,7 @@ public class SchedulingService {
     /**
      * 解决方案管理器 - 用于更新和解释解决方案
      */
-    private SolutionManager<FactorySchedulingSolution, HardSoftScore> solutionManager;
+    private SolutionManager<FactorySchedulingSolution, HardMediumSoftScore> solutionManager;
 
     /**
      * 时间槽服务 - 负责时间槽相关的数据访问和业务逻辑
@@ -97,7 +98,7 @@ public class SchedulingService {
     }
 
     @Autowired
-    public void setSolutionManager(SolutionManager<FactorySchedulingSolution, HardSoftScore> solutionManager) {
+    public void setSolutionManager(SolutionManager<FactorySchedulingSolution, HardMediumSoftScore> solutionManager) {
         this.solutionManager = solutionManager;
     }
 
@@ -176,9 +177,9 @@ public class SchedulingService {
      * 软性约束分数越高表示解决方案越好。</p>
      *
      * @param problemId 问题ID - 标识需要获取得分的调度问题实例
-     * @return HardSoftScore - 当前最佳解决方案的评分对象
+     * @return HardMediumSoftScore - 当前最佳解决方案的评分对象
      */
-    public HardSoftScore getScore(Long problemId) {
+    public HardMediumSoftScore getScore(Long problemId) {
         // 从最佳解决方案中提取得分
         return getBestSolution(problemId).getScore();
     }
@@ -354,6 +355,15 @@ public class SchedulingService {
             log.warn("保存失败：解决方案中没有时间槽数据");
             return;
         }
+        List<Timeslot> timeslots = solution.getTimeslots();
+        for (Timeslot timeslot : timeslots) {
+            if(timeslot.getMaintenance() == null) {
+                continue;
+            }
+            log.info("机器匹配,任务号:{},工序号:{},是否匹配:{}",timeslot.getTask().getTaskNo(),
+                    timeslot.getProcedure().getProcedureNo(),
+                    timeslot.getWorkCenter().getWorkCenterCode().equals(timeslot.getMaintenance().getWorkCenter().getWorkCenterCode()));
+        }
         try {
             // 首先保存所有时间槽到数据库
             int savedCount = solution.getTimeslots().size();
@@ -512,7 +522,7 @@ public class SchedulingService {
      * @param problemId 问题ID - 标识需要解释的调度问题实例
      * @return ScoreExplanation - 包含解决方案得分详细解释的对象
      */
-    public ScoreExplanation<FactorySchedulingSolution, HardSoftScore> explainSolution(Long problemId) {
+    public ScoreExplanation<FactorySchedulingSolution, HardMediumSoftScore> explainSolution(Long problemId) {
         // 获取最佳解决方案
         FactorySchedulingSolution solution = getBestSolution(problemId);
         // 使用解决方案管理器生成解释
