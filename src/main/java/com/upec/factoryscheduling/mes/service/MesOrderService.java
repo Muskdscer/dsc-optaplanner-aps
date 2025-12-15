@@ -321,7 +321,7 @@ public class MesOrderService {
         for (List<Procedure> value : maps.values()) {
             Procedure procedure = value.stream().min(Comparator.comparing(Procedure::getProcedureNo)).orElse(null);
             NodeLevelManager.calculateLevels(procedure);
-            System.out.println(procedure);
+
         }
         return procedureService.saveProcedures(procedures);
     }

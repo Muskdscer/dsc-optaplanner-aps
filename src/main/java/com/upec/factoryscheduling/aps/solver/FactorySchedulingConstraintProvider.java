@@ -2,7 +2,6 @@ package com.upec.factoryscheduling.aps.solver;
 
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import lombok.extern.slf4j.Slf4j;
-
 import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
 import org.optaplanner.core.api.score.stream.Constraint;
 import org.optaplanner.core.api.score.stream.ConstraintFactory;
@@ -11,10 +10,10 @@ import org.optaplanner.core.api.score.stream.Joiners;
 import org.springframework.stereotype.Component;
 
 import java.io.Serializable;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
-import static org.optaplanner.core.api.score.stream.ConstraintCollectors.sum;
-
+import static org.optaplanner.core.api.score.stream.ConstraintCollectors.*;
 
 @Slf4j
 @Component
@@ -29,335 +28,372 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     private static final int AVERAGE_DAILY_LOAD = MINUTES_PER_DAY * PLANNING_HORIZON_DAYS;
     private static final int CAPACITY_BUFFER = 60; // 每天预留60分钟缓冲
 
+    // 权重常数
+    private static final int HARD_PENALTY_WEIGHT = 1000;
+    private static final int MEDIUM_PENALTY_WEIGHT = 100;
+    private static final int SOFT_REWARD_WEIGHT = 10;
+
     @Override
     public Constraint[] defineConstraints(ConstraintFactory constraintFactory) {
         return new Constraint[]{
-                // 硬约束 - 按重要性和计算复杂度排序
-                workCenterMatch(constraintFactory),
-                orderDateConstraint(constraintFactory),
-                machineCapacityConstraint(constraintFactory),
-                noOverlappingTimeslots(constraintFactory),
-                procedureSequenceConstraint(constraintFactory),
-                procedureSliceSequenceConstraint(constraintFactory),
+                // ============ 硬约束 (必须满足) ============
+                // 基本业务规则违反 - 最高优先级
+                hardWorkCenterMatch(constraintFactory),
+                hardWorkCenterAvailability(constraintFactory),
+                hardNoOverlap(constraintFactory),
+                hardCapacityExceeded(constraintFactory),
 
-                // 软约束 - 使用reward优化
-                rewardEarlyCompletion(constraintFactory),
-                rewardOnTimeStart(constraintFactory),
-                rewardHighPriorityEarly(constraintFactory),
-                rewardBalancedLoad(constraintFactory),
-                rewardContinuousSlices(constraintFactory),
-                rewardCapacityBuffer(constraintFactory)
+                // ============ 中等约束 (尽量满足) ============
+                // 重要业务规则 - 中等优先级
+                mediumProcedureSequence(constraintFactory),
+                mediumProcedureSliceSequence(constraintFactory),
+                mediumOrderDateConstraint(constraintFactory),
+
+                // ============ 软约束 (优化目标) ============
+                // 业务优化目标 - 低优先级
+                softEarlyCompletion(constraintFactory),
+                softOnTimeStart(constraintFactory),
+                softHighPriorityFirst(constraintFactory),
+                softBalancedLoad(constraintFactory),
+                softContinuousSlices(constraintFactory),
+                softCapacityUtilization(constraintFactory)
         };
     }
 
+    // ==================== 硬约束 ====================
+
     /**
-     * 硬约束1: 工作中心约束 - 优化版
-     * 使用reward奖励正确匹配，而不是惩罚错误
+     * 硬约束1: 工作中心必须匹配
+     * 违反条件：为维护任务分配了错误的工作中心
      */
-    protected Constraint workCenterMatch(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getMaintenance() != null
-                        && timeslot.getWorkCenter() != null)
-                .reward(HardMediumSoftScore.ONE_HARD,
-                        timeslot -> timeslot.getMaintenance().getWorkCenter().getId()
-                                .equals(timeslot.getWorkCenter().getId()) ? 1 : 0)
-                .asConstraint("工作中心匹配奖励");
+    protected Constraint hardWorkCenterMatch(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getMaintenance() != null &&
+                                timeslot.getWorkCenter() != null &&
+                                !timeslot.getMaintenance().getWorkCenter().getId()
+                                        .equals(timeslot.getWorkCenter().getId()))
+                .penalize(HardMediumSoftScore.ONE_HARD,
+                        timeslot -> HARD_PENALTY_WEIGHT * 10) // 严重违反
+                .asConstraint("硬约束：工作中心必须匹配");
     }
 
     /**
-     * 硬约束2: 工作中心可用性
-     * 使用reward奖励使用可用的工作中心
+     * 硬约束2: 工作中心必须可用
+     * 违反条件：使用了状态不可用的工作中心
      */
-    protected Constraint workCenterStatusAvailable(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getWorkCenter() != null)
-                .reward(HardMediumSoftScore.ONE_HARD,
-                        timeslot -> STATUS_AVAILABLE.equals(timeslot.getWorkCenter().getStatus()) ? 1 : 0)
-                .asConstraint("使用可用工作中心奖励");
+    protected Constraint hardWorkCenterAvailability(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getWorkCenter() != null &&
+                                STATUS_UNAVAILABLE.equals(timeslot.getWorkCenter().getStatus()))
+                .penalize(HardMediumSoftScore.ONE_HARD,
+                        timeslot -> HARD_PENALTY_WEIGHT * 5)
+                .asConstraint("硬约束：工作中心必须可用");
     }
 
     /**
-     * 硬约束3: 机器容量约束 - reward版本
-     * 奖励剩余容量，而不是惩罚超出容量
+     * 硬约束3: 同一工作中心时间不能重叠
+     * 违反条件：同一工作中心在同一时间段安排了多个任务
      */
-    protected Constraint machineCapacityConstraint(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getMaintenance() != null
-                        && timeslot.getDuration() > 0)
+    protected Constraint hardNoOverlap(ConstraintFactory cf) {
+        return cf.forEachUniquePair(Timeslot.class,
+                        Joiners.equal(Timeslot::getWorkCenter),
+                        Joiners.overlapping(
+                                Timeslot::getStartTime,
+                                Timeslot::getEndTime
+                        ))
+                .penalize(HardMediumSoftScore.ONE_HARD,
+                        (t1, t2) -> {
+                            // 计算重叠时间，重叠越长惩罚越大
+                            LocalDateTime overlapStart = t1.getStartTime()
+                                    .isAfter(t2.getStartTime()) ?
+                                    t1.getStartTime() : t2.getStartTime();
+                            LocalDateTime overlapEnd = t1.getEndTime()
+                                    .isBefore(t2.getEndTime()) ?
+                                    t1.getEndTime() : t2.getEndTime();
+                            long overlapMinutes = Duration.between(
+                                    overlapStart, overlapEnd).toMinutes();
+                            return (int) overlapMinutes * HARD_PENALTY_WEIGHT;
+                        })
+                .asConstraint("硬约束：同一工作中心时间不能重叠");
+    }
+
+    /**
+     * 硬约束4: 不能超过维护容量
+     * 违反条件：分配给某天维护的任务总时长超过维护容量
+     */
+    protected Constraint hardCapacityExceeded(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getMaintenance() != null &&
+                                timeslot.getDuration() > 0)
                 .groupBy(
                         Timeslot::getMaintenance,
                         sum(Timeslot::getDuration)
                 )
-                .reward(HardMediumSoftScore.ONE_HARD,
+                .filter((maintenance, totalDuration) ->
+                        totalDuration + maintenance.getUsageTime() > maintenance.getCapacity())
+                .penalize(HardMediumSoftScore.ONE_HARD,
                         (maintenance, totalDuration) -> {
-                            int remaining = maintenance.getCapacity() - totalDuration - maintenance.getUsageTime();
-                            // 有剩余容量就奖励，超出就惩罚
-                            return remaining >= 0 ? remaining / 10 : 0;
+                            int exceeded = totalDuration + maintenance.getUsageTime()
+                                    - maintenance.getCapacity();
+                            return exceeded * HARD_PENALTY_WEIGHT;
                         })
-                .asConstraint("容量内使用奖励");
+                .asConstraint("硬约束：不能超过维护容量");
     }
 
+    // ==================== 中等约束 ====================
+
     /**
-     * 硬约束4: 工序顺序约束 - reward版本
-     * 奖励正确的工序顺序
+     * 中等约束1: 工序顺序约束
+     * 违反条件：后序工序在前序工序完成前开始
      */
-    protected Constraint procedureSequenceConstraint(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getProcedure() != null
-                        && timeslot.getEndTime() != null
-                        && timeslot.getProcedure().getNextProcedure() != null
-                        && !timeslot.getProcedure().getNextProcedure().isEmpty())
+    protected Constraint mediumProcedureSequence(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getProcedure() != null &&
+                                timeslot.getEndTime() != null &&
+                                !timeslot.getProcedure().getNextProcedure().isEmpty())
                 .join(Timeslot.class,
-                        Joiners.equal(t -> t.getTask().getTaskNo(), t -> t.getTask().getTaskNo()),
-                        Joiners.lessThan(t -> t.getProcedure().getProcedureNo(),
-                                t -> t.getProcedure().getProcedureNo()),
+                        Joiners.equal(t -> t.getTask().getTaskNo(),
+                                t -> t.getTask().getTaskNo()),
                         Joiners.filtering((current, next) -> {
-                            if (next.getProcedure() == null || next.getStartTime() == null) {
-                                return false;
-                            }
-                            String nextProcId = next.getProcedure().getId();
+                            // 检查next是否是current的后序
                             return current.getProcedure().getNextProcedure().stream()
-                                    .anyMatch(p -> p.getId().equals(nextProcId));
+                                    .anyMatch(p -> p.getId()
+                                            .equals(next.getProcedure().getId()));
                         }))
-                .reward(HardMediumSoftScore.ONE_HARD,
+                .filter((current, next) ->
+                        next.getStartTime() != null &&
+                                !current.getEndTime().isBefore(next.getStartTime()))
+                .penalize(HardMediumSoftScore.ONE_MEDIUM,
                         (current, next) -> {
-                            // 奖励正确的顺序（前序结束早于后序开始）
-                            return current.getEndTime().isBefore(next.getStartTime()) ||
-                                    current.getEndTime().equals(next.getStartTime()) ? 1 : 0;
+                            // 如果后序在前序完成前开始，计算提前的时间
+                            long minutesEarly = Duration.between(
+                                    next.getStartTime(), current.getEndTime()).toMinutes();
+                            return (int) Math.max(0, minutesEarly) * MEDIUM_PENALTY_WEIGHT;
                         })
-                .asConstraint("正确工序顺序奖励");
+                .asConstraint("中约束：工序必须按顺序执行");
     }
 
     /**
-     * 硬约束5: 同一工序的时间片顺序 - reward版本
+     * 中等约束2: 工序分片顺序约束
+     * 违反条件：同一工序的分片顺序错误
      */
-    protected Constraint procedureSliceSequenceConstraint(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getTotal() > 1
-                        && timeslot.getIndex() < timeslot.getTotal()
-                        && timeslot.getEndTime() != null
-                        && timeslot.getProcedure() != null)
+    protected Constraint mediumProcedureSliceSequence(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getTotal() > 1 &&
+                                timeslot.getIndex() < timeslot.getTotal() - 1)
                 .join(Timeslot.class,
-                        Joiners.equal(t -> t.getProcedure().getId(), t -> t.getProcedure().getId()),
+                        Joiners.equal(Timeslot::getProcedure),
                         Joiners.equal(t -> t.getIndex() + 1, Timeslot::getIndex))
-                .reward(HardMediumSoftScore.ONE_HARD,
+                .filter((slice1, slice2) ->
+                        slice2.getStartTime() != null &&
+                                slice1.getEndTime() != null &&
+                                !slice1.getEndTime().isBefore(slice2.getStartTime()))
+                .penalize(HardMediumSoftScore.ONE_MEDIUM,
                         (slice1, slice2) -> {
-                            if (slice2.getStartTime() == null) return 0;
-                            // 奖励正确的片段顺序
-                            return slice1.getEndTime().isBefore(slice2.getStartTime()) ||
-                                    slice1.getEndTime().equals(slice2.getStartTime()) ? 1 : 0;
+                            // 分片顺序错误，给予固定惩罚
+                            return MEDIUM_PENALTY_WEIGHT * 5;
                         })
-                .asConstraint("正确分片顺序奖励");
+                .asConstraint("中约束：同一工序分片必须按顺序执行");
     }
 
     /**
-     * 硬约束6: 订单日期约束 - reward版本
+     * 中等约束3: 订单日期约束
+     * 违反条件：任务开始时间早于实际开始时间
      */
-    protected Constraint orderDateConstraint(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getTask() != null
-                        && timeslot.getTask().getFactStartDate() != null
-                        && timeslot.getProcedureIndex() == 1
-                        && timeslot.getStartTime() != null)
-                .reward(HardMediumSoftScore.ONE_HARD,
+    protected Constraint mediumOrderDateConstraint(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getTask() != null &&
+                                timeslot.getTask().getFactStartDate() != null &&
+                                timeslot.getStartTime() != null &&
+                                timeslot.getStartTime().isBefore(
+                                        timeslot.getTask().getFactStartDate()))
+                .penalize(HardMediumSoftScore.ONE_MEDIUM,
                         timeslot -> {
-                            // 奖励符合实际开始时间的安排
-                            return !timeslot.getStartTime().isBefore(timeslot.getTask().getFactStartDate()) ? 1 : 0;
+                            // 早于实际开始时间的天数
+                            long daysEarly = Duration.between(
+                                    timeslot.getStartTime(),
+                                    timeslot.getTask().getFactStartDate()).toDays();
+                            return (int) daysEarly * MEDIUM_PENALTY_WEIGHT;
                         })
-                .asConstraint("符合订单开始日期奖励");
+                .asConstraint("中约束：不能早于实际开始时间");
     }
 
-    /**
-     * 硬约束7: 时间重叠约束 - reward版本
-     * 奖励不重叠的时间槽配置
-     */
-    protected Constraint noOverlappingTimeslots(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getStartTime() != null
-                        && timeslot.getEndTime() != null
-                        && timeslot.getWorkCenter() != null)
-                .join(Timeslot.class,
-                        Joiners.equal(t -> t.getWorkCenter().getId(), t -> t.getWorkCenter().getId()),
-                        Joiners.lessThan(Timeslot::getId),
-                        Joiners.overlapping(
-                                Timeslot::getStartTime,
-                                Timeslot::getEndTime,
-                                Timeslot::getStartTime,
-                                Timeslot::getEndTime
-                        ))
-                // 找到重叠就不奖励（等同于惩罚）
-                .penalize(HardMediumSoftScore.ONE_HARD)
-                .asConstraint("避免时间重叠");
-    }
-
-    // ==================== 软约束 - 全部使用reward ====================
+    // ==================== 软约束 ====================
 
     /**
      * 软约束1: 奖励提前完成
-     * 越早完成奖励越多
+     * 优化目标：越早完成越好
      */
-    protected Constraint rewardEarlyCompletion(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getEndTime() != null
-                        && timeslot.getProcedure() != null
-                        && timeslot.getProcedure().getPlanEndDate() != null)
+    protected Constraint softEarlyCompletion(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getEndTime() != null &&
+                                timeslot.getProcedure() != null &&
+                                timeslot.getProcedure().getPlanEndDate() != null)
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         timeslot -> {
-                            LocalDateTime planEnd = timeslot.getProcedure().getPlanEndDate()
-                                    .atTime(23, 59);
+                            LocalDateTime planEnd = timeslot.getProcedure()
+                                    .getPlanEndDate().atTime(23, 59);
                             LocalDateTime actualEnd = timeslot.getEndTime();
+
                             if (actualEnd.isBefore(planEnd)) {
-                                // 提前完成，奖励天数差
-                                long daysEarly = java.time.Duration.between(actualEnd, planEnd).toDays();
-                                return (int) Math.min(daysEarly * 2, 100);
+                                // 提前完成，奖励天数
+                                long daysEarly = Duration.between(
+                                        actualEnd, planEnd).toDays();
+                                return (int) daysEarly * SOFT_REWARD_WEIGHT;
                             }
                             return 0;
                         })
-                .asConstraint("提前完成奖励");
+                .asConstraint("软约束：奖励提前完成");
     }
 
     /**
      * 软约束2: 奖励准时开始
-     * 按计划开始时间开始的任务获得奖励
+     * 优化目标：按计划时间开始
      */
-    protected Constraint rewardOnTimeStart(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getStartTime() != null
-                        && timeslot.getTask() != null
-                        && timeslot.getTask().getPlanStartDate() != null
-                        && timeslot.getProcedureIndex() == 1)
+    protected Constraint softOnTimeStart(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getStartTime() != null &&
+                                timeslot.getTask() != null &&
+                                timeslot.getTask().getPlanStartDate() != null &&
+                                timeslot.getProcedureIndex() == 1)
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         timeslot -> {
-                            LocalDateTime planStart = timeslot.getTask().getPlanStartDate().atStartOfDay();
+                            LocalDateTime planStart = timeslot.getTask()
+                                    .getPlanStartDate().atStartOfDay();
                             LocalDateTime actualStart = timeslot.getStartTime();
-                            long hoursDiff = Math.abs(java.time.Duration.between(planStart, actualStart).toHours());
-                            // 在计划时间±24小时内开始，给予奖励
-                            if (hoursDiff <= 24) {
-                                return 50 - (int) (hoursDiff / 2);
+                            long hoursDiff = Math.abs(Duration.between(
+                                    planStart, actualStart).toHours());
+
+                            // 在计划时间±4小时内开始，给予奖励
+                            if (hoursDiff <= 4) {
+                                return (int) (SOFT_REWARD_WEIGHT * (5 - hoursDiff));
                             }
                             return 0;
                         })
-                .asConstraint("准时开始奖励");
+                .asConstraint("软约束：奖励准时开始");
     }
 
     /**
-     * 软约束3: 奖励高优先级订单早完成
-     * 优先级越高，越早完成，奖励越多
+     * 软约束3: 奖励高优先级任务
+     * 优化目标：优先安排高优先级任务
      */
-    protected Constraint rewardHighPriorityEarly(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getPriority() != null
-                        && timeslot.getEndTime() != null
-                        && timeslot.getProcedureIndex() == timeslot.getProcedure().getLevel())
+    protected Constraint softHighPriorityFirst(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getPriority() != null &&
+                                timeslot.getEndTime() != null)
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         timeslot -> {
-                            // 高优先级（数字小）越早完成奖励越多
-                            int priority = Math.min(timeslot.getPriority(), 10);
+                            int priority = timeslot.getPriority();
                             LocalDateTime now = LocalDateTime.now();
-                            long daysFromNow = java.time.Duration.between(now, timeslot.getEndTime()).toDays();
 
-                            // 30天内完成才奖励，优先级1最高奖励
-                            if (daysFromNow >= 0 && daysFromNow <= 30) {
-                                int reward = (11 - priority) * (31 - (int) daysFromNow);
-                                return Math.max(0, reward / 5);
+                            // 高优先级且近期完成，奖励更多
+                            if (priority <= 3) { // 高优先级
+                                long daysFromNow = Duration.between(
+                                        now, timeslot.getEndTime()).toDays();
+                                if (daysFromNow >= 0 && daysFromNow <= 7) {
+                                    return (4 - priority) * SOFT_REWARD_WEIGHT * 2;
+                                }
                             }
                             return 0;
                         })
-                .asConstraint("高优先级早完成奖励");
+                .asConstraint("软约束：奖励高优先级任务先完成");
     }
 
     /**
-     * 软约束4: 奖励均衡的机器负载
-     * 负载接近平均值的机器获得奖励
+     * 软约束4: 奖励均衡负载
+     * 优化目标：工作中心负载均衡
      */
-    protected Constraint rewardBalancedLoad(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getWorkCenter() != null
-                        && timeslot.getDuration() > 0)
+    protected Constraint softBalancedLoad(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getWorkCenter() != null &&
+                                timeslot.getDuration() > 0)
                 .groupBy(Timeslot::getWorkCenter,
                         sum(Timeslot::getDuration))
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         (workCenter, totalDuration) -> {
-                            // 奖励接近平均负载的机器
+                            // 奖励接近平均负载的工作中心
                             int deviation = Math.abs(totalDuration - AVERAGE_DAILY_LOAD);
-                            // 偏差越小奖励越多
-                            int maxDeviation = AVERAGE_DAILY_LOAD / 2;
+                            int maxDeviation = AVERAGE_DAILY_LOAD / 4; // 允许25%偏差
+
                             if (deviation < maxDeviation) {
-                                return (maxDeviation - deviation) / 500;
+                                return (maxDeviation - deviation) / 100;
                             }
                             return 0;
                         })
-                .asConstraint("均衡负载奖励");
+                .asConstraint("软约束：奖励均衡负载");
     }
 
     /**
-     * 软约束5: 奖励连续的时间片
-     * 同一工序的时间片越紧密，奖励越多
+     * 软约束5: 奖励连续分片
+     * 优化目标：同一工序的分片连续执行
      */
-    protected Constraint rewardContinuousSlices(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getTotal() > 1
-                        && timeslot.getIndex() < timeslot.getTotal()
-                        && timeslot.getEndTime() != null
-                        && timeslot.getProcedure() != null)
+    protected Constraint softContinuousSlices(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getTotal() > 1 &&
+                                timeslot.getIndex() < timeslot.getTotal() - 1)
                 .join(Timeslot.class,
-                        Joiners.equal(t -> t.getProcedure().getId(), t -> t.getProcedure().getId()),
+                        Joiners.equal(Timeslot::getProcedure),
                         Joiners.equal(t -> t.getIndex() + 1, Timeslot::getIndex))
-                .filter((slice1, slice2) -> slice2.getStartTime() != null
-                        && !slice2.getStartTime().isBefore(slice1.getEndTime()))
+                .filter((slice1, slice2) ->
+                        slice2.getStartTime() != null &&
+                                slice1.getEndTime() != null)
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         (slice1, slice2) -> {
-                            long intervalHours = java.time.Duration.between(
+                            long gapMinutes = Duration.between(
                                     slice1.getEndTime(),
-                                    slice2.getStartTime()).toHours();
+                                    slice2.getStartTime()).toMinutes();
+
                             // 间隔越短奖励越多
-                            if (intervalHours == 0) {
-                                return 100; // 连续执行最高奖励
-                            } else if (intervalHours <= 24) {
-                                return 50 - (int) (intervalHours * 2);
+                            if (gapMinutes <= 30) { // 30分钟内开始下一个分片
+                                return SOFT_REWARD_WEIGHT * 3;
+                            } else if (gapMinutes <= 60) { // 1小时内
+                                return SOFT_REWARD_WEIGHT;
                             }
                             return 0;
                         })
-                .asConstraint("连续分片奖励");
+                .asConstraint("软约束：奖励连续分片");
     }
 
     /**
-     * 软约束6: 奖励预留容量缓冲
-     * 为每天预留适当的缓冲时间
+     * 软约束6: 奖励合理容量利用
+     * 优化目标：合理利用维护容量，不过度也不浪费
      */
-    protected Constraint rewardCapacityBuffer(ConstraintFactory constraintFactory) {
-        return constraintFactory
-                .forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getMaintenance() != null
-                        && timeslot.getDuration() > 0)
+    protected Constraint softCapacityUtilization(ConstraintFactory cf) {
+        return cf.forEach(Timeslot.class)
+                .filter(timeslot ->
+                        timeslot.getMaintenance() != null &&
+                                timeslot.getDuration() > 0)
                 .groupBy(
                         Timeslot::getMaintenance,
                         sum(Timeslot::getDuration)
                 )
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         (maintenance, totalDuration) -> {
-                            int remaining = maintenance.getCapacity() - totalDuration;
-                            // 奖励保留60-120分钟缓冲
-                            if (remaining >= CAPACITY_BUFFER && remaining <= CAPACITY_BUFFER * 2) {
-                                return remaining / 10;
-                            } else if (remaining > CAPACITY_BUFFER * 2) {
-                                // 预留太多也不好，轻微奖励
-                                return 5;
+                            int used = totalDuration + maintenance.getUsageTime();
+                            int capacity = maintenance.getCapacity();
+
+                            // 最佳利用率：80%-90%
+                            int optimalMin = (int) (capacity * 0.8);
+                            int optimalMax = (int) (capacity * 0.9);
+
+                            if (used >= optimalMin && used <= optimalMax) {
+                                return SOFT_REWARD_WEIGHT * 5;
+                            } else if (used >= optimalMin * 0.8 && used <= optimalMax * 1.2) {
+                                return SOFT_REWARD_WEIGHT * 2;
                             }
                             return 0;
                         })
-                .asConstraint("合理容量缓冲奖励");
+                .asConstraint("软约束：奖励合理容量利用");
     }
 }

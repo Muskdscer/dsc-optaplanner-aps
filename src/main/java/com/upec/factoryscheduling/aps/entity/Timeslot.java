@@ -11,6 +11,7 @@ import org.optaplanner.core.api.domain.variable.ShadowVariable;
 
 import javax.persistence.*;
 import java.io.Serializable;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
@@ -138,6 +139,47 @@ public class Timeslot implements Serializable {
         } finally {
             lock.unlock();
         }
+    }
+
+
+
+    /**
+     * 优化的重叠检查方法
+     */
+    public boolean overlapsWithOptimized(Timeslot other) {
+        if (other == null ||
+                workCenter == null ||
+                other.getWorkCenter() == null ||
+                startTime == null ||
+                endTime == null ||
+                other.getStartTime() == null ||
+                other.getEndTime() == null) {
+            return false;
+        }
+
+        // 快速检查：工作中心不同则不重叠
+        if (!workCenter.getId().equals(other.getWorkCenter().getId())) {
+            return false;
+        }
+
+        // 使用时间比较而不是Duration计算，性能更好
+        return !(endTime.isBefore(other.getStartTime()) ||
+                startTime.isAfter(other.getEndTime()));
+    }
+    /**
+     * 计算与另一个时间槽的重叠分钟数
+     */
+    public long calculateOverlapMinutes(Timeslot other) {
+        if (!overlapsWithOptimized(other)) {
+            return 0;
+        }
+
+        LocalDateTime overlapStart = startTime.isAfter(other.getStartTime()) ?
+                startTime : other.getStartTime();
+        LocalDateTime overlapEnd = endTime.isBefore(other.getEndTime()) ?
+                endTime : other.getEndTime();
+
+        return Duration.between(overlapStart, overlapEnd).toMinutes();
     }
 
 }
