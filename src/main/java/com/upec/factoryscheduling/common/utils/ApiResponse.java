@@ -33,6 +33,10 @@ public class ApiResponse<T> {
         return ApiResponse.response(data, 200, msg);
     }
 
+    public static ApiResponse<Void> successVoid(String msg) {
+        return ApiResponse.response(null, 200, msg);
+    }
+
     public static <T> ApiResponse<T> error(String msg) {
         return response(null, -1, msg);
     }

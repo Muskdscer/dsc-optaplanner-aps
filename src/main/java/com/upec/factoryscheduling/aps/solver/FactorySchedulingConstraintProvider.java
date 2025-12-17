@@ -39,8 +39,6 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
                 // ============ 硬约束 (必须满足) ============
                 // 基本业务规则违反 - 最高优先级
                 hardWorkCenterMatch(constraintFactory),
-                hardWorkCenterAvailability(constraintFactory),
-                hardNoOverlap(constraintFactory),
                 hardCapacityExceeded(constraintFactory),
 
                 // ============ 中等约束 (尽量满足) ============
@@ -125,19 +123,13 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
      */
     protected Constraint hardCapacityExceeded(ConstraintFactory cf) {
         return cf.forEach(Timeslot.class)
-                .filter(timeslot ->
-                        timeslot.getMaintenance() != null &&
-                                timeslot.getDuration() > 0)
-                .groupBy(
-                        Timeslot::getMaintenance,
-                        sum(Timeslot::getDuration)
-                )
+                .filter(timeslot -> timeslot.getMaintenance() != null && timeslot.getDuration() > 0)
+                .groupBy(Timeslot::getMaintenance, sum(Timeslot::getDuration))
                 .filter((maintenance, totalDuration) ->
                         totalDuration + maintenance.getUsageTime() > maintenance.getCapacity())
                 .penalize(HardMediumSoftScore.ONE_HARD,
                         (maintenance, totalDuration) -> {
-                            int exceeded = totalDuration + maintenance.getUsageTime()
-                                    - maintenance.getCapacity();
+                            int exceeded = totalDuration + maintenance.getUsageTime() - maintenance.getCapacity();
                             return exceeded * HARD_PENALTY_WEIGHT;
                         })
                 .asConstraint("硬约束：不能超过维护容量");
@@ -184,8 +176,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     protected Constraint mediumProcedureSliceSequence(ConstraintFactory cf) {
         return cf.forEach(Timeslot.class)
                 .filter(timeslot ->
-                        timeslot.getTotal() > 1 &&
-                                timeslot.getIndex() < timeslot.getTotal() - 1)
+                        timeslot.getTotal() > 1 && timeslot.getIndex() < timeslot.getTotal() - 1)
                 .join(Timeslot.class,
                         Joiners.equal(Timeslot::getProcedure),
                         Joiners.equal(t -> t.getIndex() + 1, Timeslot::getIndex))
@@ -288,17 +279,14 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     protected Constraint softHighPriorityFirst(ConstraintFactory cf) {
         return cf.forEach(Timeslot.class)
                 .filter(timeslot ->
-                        timeslot.getPriority() != null &&
-                                timeslot.getEndTime() != null)
+                        timeslot.getPriority() != null && timeslot.getEndTime() != null)
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         timeslot -> {
                             int priority = timeslot.getPriority();
                             LocalDateTime now = LocalDateTime.now();
-
                             // 高优先级且近期完成，奖励更多
                             if (priority <= 3) { // 高优先级
-                                long daysFromNow = Duration.between(
-                                        now, timeslot.getEndTime()).toDays();
+                                long daysFromNow = Duration.between(now, timeslot.getEndTime()).toDays();
                                 if (daysFromNow >= 0 && daysFromNow <= 7) {
                                     return (4 - priority) * SOFT_REWARD_WEIGHT * 2;
                                 }
@@ -324,7 +312,6 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
                             // 奖励接近平均负载的工作中心
                             int deviation = Math.abs(totalDuration - AVERAGE_DAILY_LOAD);
                             int maxDeviation = AVERAGE_DAILY_LOAD / 4; // 允许25%偏差
-
                             if (deviation < maxDeviation) {
                                 return (maxDeviation - deviation) / 100;
                             }

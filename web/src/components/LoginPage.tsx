@@ -21,11 +21,9 @@ const LoginPage: React.FC = () => {
         window.location.href = '/';
       } else {
         message.error('登录失败，请重试');
-        console.error('登录错误:', response);
       }
     } catch (error) {
       message.error('登录失败，请重试');
-      console.error('登录错误:', error);
     } finally {
       setLoading(false);
     }

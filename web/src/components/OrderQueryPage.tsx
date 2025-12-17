@@ -47,7 +47,6 @@ const OrderQueryPage: React.FC = () => {
     const rowSelection = {
         selectedRowKeys,
         onChange: (newSelectedRowKeys: React.Key[]) => {
-            console.log('选中的行:', newSelectedRowKeys);
             setSelectedRowKeys(newSelectedRowKeys);
         },
     };

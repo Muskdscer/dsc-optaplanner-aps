@@ -65,10 +65,34 @@ const SchedulingTimelinePage: React.FC = () => {
   };
 
   // 渲染单元格内容
-  const renderCellContent = (timeslots?: Timeslot[]) => {
+  const renderCellContent = (timeslots?: Timeslot[], currentDate?: string) => {
     if (!timeslots || timeslots.length === 0) {
       return <div style={{ textAlign: 'center', padding: '8px', color: '#999' }}>未安排</div>;
     }
+    
+    // 显示时间槽在当前日期的时间段
+    const getDisplayTimeRange = (timeslot: Timeslot, date: string) => {
+      if (!timeslot.startTime || !timeslot.endTime) return '';
+      
+      const startTime = timeslot.startTime;
+      const endTime = timeslot.endTime;
+      const startDate = startTime.substring(0, 10);
+      const endDate = endTime.substring(0, 10);
+      
+      if (startDate === date && endDate === date) {
+        // 同一日期内的时间槽
+        return `${startTime.substring(11, 16)} - ${endTime.substring(11, 16)}`;
+      } else if (startDate === date) {
+        // 开始日期
+        return `${startTime.substring(11, 16)} - 24:00`;
+      } else if (endDate === date) {
+        // 结束日期
+        return `00:00 - ${endTime.substring(11, 16)}`;
+      } else {
+        // 中间日期
+        return '00:00 - 24:00';
+      }
+    };
     
     return (
       <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -111,9 +135,11 @@ const SchedulingTimelinePage: React.FC = () => {
                 <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '2px' }}>
                   {ts.procedure?.procedureName || '未知'}（{ts.procedure?.procedureNo || '未知'}）
                 </div>
-                {/*<div style={{ color: '#666', fontSize: '10px' }}>*/}
-                {/*  {ts.startTime?.substring(11, 16)} - {ts.endTime?.substring(11, 16)}*/}
-                {/*</div>*/}
+                {currentDate && (
+                  <div style={{ color: '#666', fontSize: '10px' }}>
+                    {getDisplayTimeRange(ts, currentDate)}
+                  </div>
+                )}
                 <div style={{ marginTop: '2px' }}>
                   <Tag 
                     color={
@@ -132,12 +158,69 @@ const SchedulingTimelinePage: React.FC = () => {
     );
   };
 
+  // 格式化日期显示
+  const formatDate = (dateStr: string) => {
+    // 将YYYY-MM-DD格式转换为更友好的显示
+    const date = new Date(dateStr);
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${month}月${day}日`;
+  };
+
+  // 动态生成表格列
+  const generateColumns = () => {
+    const columns: ColumnType<TableData>[] = [
+      {
+        title: '任务号',
+        dataIndex: 'taskNo',
+        key: 'taskNo',
+        width: 200,
+        fixed: 'left' as const,
+        align: 'center' as const,
+        ellipsis: true,
+        render: (text: string) => (
+          <div style={{ fontWeight: 'bold', color: '#1890ff' }}>{text}</div>
+        )
+      },
+    ];
+
+    // 添加日期列
+    dateColumns.forEach(date => {
+      columns.push({
+        title: formatDate(date),
+        dataIndex: date,
+        key: date,
+        width: 180,
+        align: 'center' as const,
+        render: (timeslots: Timeslot[]) => renderCellContent(timeslots, date),
+        className: 'date-column'
+      });
+    });
+
+    return columns;
+  };
+
   useEffect(() => {
+    // 获取时间槽跨越的所有日期
+    const getDatesInRange = (startTime: string, endTime: string): string[] => {
+      const startDate = new Date(startTime.substring(0, 10));
+      const endDate = new Date(endTime.substring(0, 10));
+      const dates: string[] = [];
+      
+      const currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        dates.push(currentDate.toISOString().split('T')[0]);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      return dates;
+    };
+
     // 根据任务号分组数据
     const groupTimeslotsByTask = (timeslots: Timeslot[]): TaskData => {
       return timeslots.reduce((acc, timeslot) => {
         // 空值检查
-        if (!timeslot.task || !timeslot.procedure || !timeslot.startTime) {
+        if (!timeslot.task || !timeslot.procedure || !timeslot.startTime || !timeslot.endTime) {
           return acc;
         }
         
@@ -148,11 +231,13 @@ const SchedulingTimelinePage: React.FC = () => {
         acc[key].timeslots.push(timeslot);
         
         // 按日期分组时间槽
-        const date = timeslot.startTime.substring(0, 10);
-        if (!acc[key].dateMap.has(date)) {
-          acc[key].dateMap.set(date, []);
-        }
-        acc[key].dateMap.get(date)?.push(timeslot);
+        const dates = getDatesInRange(timeslot.startTime, timeslot.endTime);
+        dates.forEach(date => {
+          if (!acc[key].dateMap.has(date)) {
+            acc[key].dateMap.set(date, []);
+          }
+          acc[key].dateMap.get(date)?.push(timeslot);
+        });
         
         return acc;
       }, {} as TaskData);
@@ -164,8 +249,12 @@ const SchedulingTimelinePage: React.FC = () => {
       
       timeslots.forEach(timeslot => {
         if (timeslot.startTime) {
-          const date = timeslot.startTime.substring(0, 10);
-          dateSet.add(date);
+          const startDate = timeslot.startTime.substring(0, 10);
+          dateSet.add(startDate);
+        }
+        if (timeslot.endTime) {
+          const endDate = timeslot.endTime.substring(0, 10);
+          dateSet.add(endDate);
         }
       });
       
@@ -215,57 +304,14 @@ const SchedulingTimelinePage: React.FC = () => {
           message.error('获取数据失败: ' + apiResponse.msg);
         }
       } catch (error) {
-        message.error('网络请求失败');
-        console.error('Fetch error:', error);
-      } finally {
+      message.error('网络请求失败');
+    } finally {
         setLoading(false);
       }
     };
 
     fetchData();
   }, []);
-
-  // 格式化日期显示
-  const formatDate = (dateStr: string) => {
-    // 将YYYY-MM-DD格式转换为更友好的显示
-    const date = new Date(dateStr);
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    return `${month}月${day}日`;
-  };
-
-  // 动态生成表格列
-  const generateColumns = () => {
-    const columns: ColumnType<TableData>[] = [
-      {
-        title: '任务号',
-        dataIndex: 'taskNo',
-        key: 'taskNo',
-        width: 200,
-        fixed: 'left' as const,
-        align: 'center' as const,
-        ellipsis: true,
-        render: (text: string) => (
-          <div style={{ fontWeight: 'bold', color: '#1890ff' }}>{text}</div>
-        )
-      },
-    ];
-
-    // 添加日期列
-    dateColumns.forEach(date => {
-      columns.push({
-        title: formatDate(date),
-        dataIndex: date,
-        key: date,
-        width: 180,
-        align: 'center' as const,
-        render: (timeslots: Timeslot[]) => renderCellContent(timeslots),
-        className: 'date-column'
-      });
-    });
-
-    return columns;
-  };
 
   return (
     <div style={{ padding: '20px' }}>

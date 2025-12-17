@@ -98,6 +98,12 @@ public class TimeslotService {
     }
 
 
+    public List<Timeslot> findAllByTaskIn(List<String> taskNos) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "order", "procedureIndex", "index").ascending();
+        return timeslotRepository.findAllByTask_TaskNoIn(taskNos, sort);
+    }
+
+
     @Transactional("h2TransactionManager")
     public void createTimeslot(List<String> taskNos, List<String> procedureIds, double time, int slice) {
         List<Timeslot> timeslots = new ArrayList<>();

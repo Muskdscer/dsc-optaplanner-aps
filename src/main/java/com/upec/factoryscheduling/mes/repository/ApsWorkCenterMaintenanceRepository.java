@@ -15,4 +15,6 @@ public interface ApsWorkCenterMaintenanceRepository extends JpaRepository<ApsWor
     // 自定义查询获取所有工作中心ID
     @Query(value = "SELECT DISTINCT b.SEQ FROM MES_BASE_WORKCENTER b", nativeQuery = true)
     List<String> findAllWorkCenterIds();
+
+    List<ApsWorkCenterMaintenance> findAllByWorkCenterCodeAndLocalDateBetween(String workCenterCode, String localDateAfter, String localDateBefore);
 }

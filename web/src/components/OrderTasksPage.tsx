@@ -39,7 +39,7 @@ const OrderTasksPage: React.FC = () => {
       timeslotForm.resetFields();
     } catch (error) {
       message.error('时间槽创建失败，请重试');
-      console.error('创建时间槽失败:', error);
+
     } finally {
       setCreatingTimeslot(false);
     }
@@ -57,7 +57,7 @@ const OrderTasksPage: React.FC = () => {
   const rowSelection = {
     selectedRowKeys,
     onChange: (newSelectedRowKeys: React.Key[]) => {
-      console.log('选中的行:', newSelectedRowKeys);
+
       setSelectedRowKeys(newSelectedRowKeys);
     },
   };
@@ -70,7 +70,7 @@ const OrderTasksPage: React.FC = () => {
       setOrderTasks(response || []);
     } catch (error) {
       message.error('网络错误，获取任务数据失败');
-      console.error('获取任务数据失败:', error);
+
       setOrderTasks([]);
     } finally {
       setLoading(false);
@@ -123,17 +123,17 @@ const OrderTasksPage: React.FC = () => {
 
     try {
       // 提取选中任务的订单编号
-      const ordernos = selectedRowKeys.map(key => {
+      const taskNos = selectedRowKeys.map(key => {
         const task = orderTasks.find(t => t.taskNo === key);
-        return task?.orderNo;
+        return task?.taskNo;
       }).filter(Boolean) as string[];
 
       // 调用API服务中的startTasks函数并获取返回信息
-      const messageInfo = await startTasks(ordernos);
+      const messageInfo = await startTasks(taskNos);
       // 使用返回的信息显示提示框
       message.success(messageInfo || '任务开始成功');
     } catch (error) {
-      console.error('开始任务失败:', error);
+
       message.error('任务开始失败，请重试');
     }
   };

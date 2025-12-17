@@ -23,7 +23,7 @@ export const getCurrentUser = (): any | null => {
     }
     return null;
   } catch (error) {
-    console.error('获取用户信息错误:', error);
+
     return null;
   }
 };
@@ -34,7 +34,7 @@ export const isLoggedIn = (): boolean => {
     const loggedIn = localStorage.getItem('isLoggedIn');
     return loggedIn === 'true';
   } catch (error) {
-    console.error('检查登录状态错误:', error);
+
     return false;
   }
 };

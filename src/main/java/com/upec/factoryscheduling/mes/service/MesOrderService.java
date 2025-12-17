@@ -194,7 +194,8 @@ public class MesOrderService {
             maintenance.setStartTime(DateUtils.parseDateTime(apsWorkCenterMaintenance.getStartTime()).toLocalTime());
             maintenance.setEndTime(DateUtils.parseDateTime(apsWorkCenterMaintenance.getEndTime()).toLocalTime());
             maintenance.setStatus(apsWorkCenterMaintenance.getStatus());
-            maintenance.setId(RandomFun.getInstance().getRandom().toString());
+            maintenance.setId(RandomFun.getInstance().getRandom());
+            maintenance.setDescription(apsWorkCenterMaintenance.getDescription());
             maintenances.add(maintenance);
         }
         return workCenterMaintenanceService.createMachineMaintenance(maintenances);
@@ -343,6 +344,6 @@ public class MesOrderService {
         if (CollectionUtil.isNotEmpty(orderNos)) {
             return mesOrderRepository.findAllByOrderNoIn(orderNos);
         }
-        return mesOrderRepository.findAllByPlanStartDateAfterAndOrderStatusIn("2025-01-01", List.of("生产中"));
+        return mesOrderRepository.findAllByPlanStartDateAfterAndOrderStatusIn("2025-01-01", List.of("生产中","待生产"));
     }
 }

@@ -10,12 +10,14 @@ import type {
   LoginResponse,
   RegisterRequest,
   RegisterResponse,
-  UserInfo
+  UserInfo,
+  WorkCenterDetail,
+  WorkCenterMaintenance
 } from './model';
 
 // 创建axios实例
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8082',
+  baseURL: 'http://localhost:8080',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -43,7 +45,7 @@ apiClient.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    console.error('API请求错误:', error);
+
     // 如果返回401未授权，清除本地存储并跳转到登录页
     if (error.response?.status === 401) {
       localStorage.removeItem('userInfo');
@@ -99,7 +101,7 @@ export const syncOrderData = async (orderNos: string[]): Promise<void> => {
       throw new Error(`同步失败: ${response.msg || '未知错误'}`);
     }
   } catch (error) {
-    console.error('同步订单数据失败:', error);
+
     throw error;
   }
 };
@@ -122,10 +124,10 @@ export const queryTasks = async (params?: OrderTaskQueryParams): Promise<Task[]>
     }
     // 从嵌套结构中提取任务列表
     const tasks = result.data?.content || [];
-    console.log('查询任务成功，返回数据长度:', tasks.length);
+
     return tasks;
   } catch (error) {
-    console.error('查询任务失败:', error);
+
     throw error;
   }
 };
@@ -148,7 +150,7 @@ export const startTasks = async (ordernos: string[]): Promise<string> => {
       throw new Error(`API调用失败: ${response.msg || '未知错误'}`);
     }
   } catch (error) {
-    console.error('开始任务失败:', error);
+
     throw error;
   }
 };
@@ -162,7 +164,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
   try {
     // 调用真实API
     const response:ApiResponse<LoginResponse> = await apiClient.post('/api/auth/login', { username, password });
-    console.log('登录响应:', response);
+
     if (response.code === 200) {
       const userInfo: UserInfo = {
         username: response.data.username,
@@ -180,7 +182,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
       throw new Error(response.msg || '登录失败');
     }
   } catch (error) {
-    console.error('登录错误:', error);
+
     throw error;
   }
 };
@@ -192,7 +194,7 @@ export const register = async (registerData: RegisterRequest): Promise<RegisterR
     // 此时response已经是{code: number, msg: string, data: string}的格式
     return response.data;
   } catch (error) {
-    console.error('注册错误:', error);
+
     throw new Error('注册失败，请重试');
   }
 };
@@ -210,7 +212,7 @@ export const logout = async (): Promise<void> => {
     // 刷新页面或跳转到登录页
     window.location.href = '/login';
   } catch (error) {
-    console.error('登出错误:', error);
+
     // 即使API调用失败，也清除本地状态
     localStorage.removeItem('userInfo');
     localStorage.removeItem('isLoggedIn');
@@ -247,7 +249,7 @@ export const createTimeslot = async (taskNos: string[], procedureIds: string[], 
       throw new Error(`创建时间槽失败: ${response.msg || '未知错误'}`);
     }
   } catch (error) {
-    console.error('创建时间槽失败:', error);
+
     throw error;
   }
 };
@@ -258,7 +260,61 @@ export const getTimeslotList = async () => {
     const response = await apiClient.get<any>('/api/timeslot/list');
     return response;
   } catch (error) {
-    console.error('获取时间槽列表失败:', error);
+
+    throw error;
+  }
+};
+
+// 获取工作中心列表
+export const getWorkCenterList = async (): Promise<WorkCenterDetail[]> => {
+  try {
+    const response: ApiResponse<WorkCenterDetail[]> = await apiClient.get('/api/mes_work_center/list');
+    if (response.code !== 200) {
+      throw new Error(`获取工作中心列表失败: ${response.msg || '未知错误'}`);
+    }
+    return response.data;
+  } catch (error) {
+
+    throw error;
+  }
+};
+
+// 获取工作中心维护计划
+export const getWorkCenterMaintenance = async (
+  workCenterCode: string,
+  startDate: string,
+  endDate: string
+): Promise<WorkCenterMaintenance[]> => {
+  try {
+    const params = {
+      workCenterCode,
+      startDate,
+      endDate
+    };
+    const response: ApiResponse<WorkCenterMaintenance[]> = await apiClient.get('/api/mes_work_center/maintenance/list', { params });
+    if (response.code !== 200) {
+      throw new Error(`获取工作中心维护计划失败: ${response.msg || '未知错误'}`);
+    }
+    // 确保返回的是数组
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+
+    throw error;
+  }
+};
+
+// 更新工作中心维护计划
+export const updateWorkCenterMaintenance = async (
+  data: Partial<WorkCenterMaintenance>
+): Promise<ApiResponse<void>> => {
+  try {
+    const response: ApiResponse<void> = await apiClient.post('/api/work-calendar/update', data);
+    if (response.code !== 200) {
+      throw new Error(`更新工作中心维护计划失败: ${response.msg || '未知错误'}`);
+    }
+    return response;
+  } catch (error) {
+
     throw error;
   }
 };

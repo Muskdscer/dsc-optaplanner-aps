@@ -35,14 +35,14 @@ public class ApsWorkCenterMaintenanceService {
         LocalDate endDate = LocalDate.of(2025, 12, 31);
         for (MesBaseWorkCenter baseWorkCenter : mesBaseWorkCenters) {
             List<ApsWorkCenterMaintenance> workCenterMaintenances = new ArrayList<>();
-            for (LocalDate date = startDate; date.isBefore(endDate); date = date.plusDays(1)) {
+            for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
                 ApsWorkCenterMaintenance workCenterMaintenance = new ApsWorkCenterMaintenance();
                 workCenterMaintenance.setId(RandomFun.getInstance().getRandom());
                 workCenterMaintenance.setStatus("Active");
                 workCenterMaintenance.setWorkCenterCode(baseWorkCenter.getWorkCenterCode());
                 workCenterMaintenance.setLocalDate(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                workCenterMaintenance.setStartTime(date.atTime(9, 0).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-                workCenterMaintenance.setEndTime(date.atTime(17, 30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+                workCenterMaintenance.setStartTime(date.atTime(9, 0).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+                workCenterMaintenance.setEndTime(date.atTime(17, 30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
                 workCenterMaintenance.setCapacity(480);
                 workCenterMaintenance.setDescription(baseWorkCenter.getDescription());
                 workCenterMaintenances.add(workCenterMaintenance);
@@ -78,10 +78,10 @@ public class ApsWorkCenterMaintenanceService {
                 workCenterMaintenance.setStatus("Active");
                 workCenterMaintenance.setWorkCenterCode(baseWorkCenter.getWorkCenterCode());
                 workCenterMaintenance.setLocalDate(date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
-                workCenterMaintenance.setStartTime(date.atTime(9, 0).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-                workCenterMaintenance.setEndTime(date.atTime(17, 30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+                workCenterMaintenance.setStartTime(date.atTime(9, 0).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+                workCenterMaintenance.setEndTime(date.atTime(17, 30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
                 workCenterMaintenance.setCapacity(480);
-                workCenterMaintenance.setDescription(baseWorkCenter.getDescription() + " - 工作日历");
+                workCenterMaintenance.setDescription(baseWorkCenter.getDescription() );
                 workCenterMaintenances.add(workCenterMaintenance);
             }
 
@@ -114,4 +114,17 @@ public class ApsWorkCenterMaintenanceService {
     public List<ApsWorkCenterMaintenance> findAllByWorkCenterCodeIn(List<String> workCenterCodes) {
         return repository.findAllByWorkCenterCodeIn(workCenterCodes);
     }
+
+    public List<ApsWorkCenterMaintenance> findAllByWorkCenterCodeAndLocalDateBetween(String workCenterCode,
+                                                                                     String localDateAfter,
+                                                                                     String localDateBefore) {
+        return repository.findAllByWorkCenterCodeAndLocalDateBetween(workCenterCode, localDateAfter, localDateBefore);
+    }
+
+
+    public void update(ApsWorkCenterMaintenance workCenterMaintenance) {
+        repository.save(workCenterMaintenance);
+
+    }
+
 }

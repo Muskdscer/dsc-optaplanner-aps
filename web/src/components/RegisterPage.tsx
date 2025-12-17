@@ -36,7 +36,6 @@ const RegisterPage: React.FC = () => {
       }
     } catch (error) {
       message.error('注册失败，请重试');
-      console.error('注册错误:', error);
     } finally {
       setLoading(false);
     }

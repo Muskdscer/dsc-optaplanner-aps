@@ -200,6 +200,36 @@ export interface Maintenance {
     remainingCapacity: number;
 }
 
+// 工作中心详细信息接口
+export interface WorkCenterDetail {
+    seq: string;
+    workCenterCode: string;
+    description: string;
+    costCenterSeq: string;
+    status: string;
+    factorySeq: string;
+    createUser: string;
+    createDate: string;
+    attributes: string;
+    machineHoursCost: string;
+    humanHoursCost: string;
+    workCenterGroup: string | null;
+    remark: string | null;
+}
+
+// 工作中心维护计划接口
+export interface WorkCenterMaintenance {
+    id: string;
+    workCenterCode: string;
+    workCenterName?: string;
+    localDate: string;
+    capacity: number;
+    status: string;
+    startTime?: string;
+    endTime?: string;
+    description: string;
+}
+
 // 时间槽类型定义
 export interface Timeslot {
     id: string;

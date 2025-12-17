@@ -7,7 +7,7 @@ spring:
     h2:
       driver-class-name: org.h2.Driver
       username: sa
-      jdbc-url: jdbc:h2:mem:test
+      jdbc-url: jdbc:h2:tcp://127.0.0.1:9092/h2-data/test
 #    oracle:  # 禁用Oracle配置，但保留配置信息
 #      driver-class-name: oracle.jdbc.OracleDriver
 #      jdbc-url: jdbc:oracle:thin:@172.17.72.222:1521:cjmmes
@@ -40,7 +40,7 @@ spring:
       settings:
         web-allow-others: true
 server:
-  port: 8082
+  port: 8080
 
 # JWT 配置
 jwt:
