@@ -22,7 +22,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
 
     // 性能优化：缓存常量值
     private static final String STATUS_UNAVAILABLE = "N";
-    private static final String STATUS_AVAILABLE = "Y";
+    private static final String STATUS_AVAILABLE = "Active";
     private static final int MINUTES_PER_DAY = 480;
     private static final int PLANNING_HORIZON_DAYS = 30;
     private static final int AVERAGE_DAILY_LOAD = MINUTES_PER_DAY * PLANNING_HORIZON_DAYS;
@@ -42,6 +42,8 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
                 // 基本业务规则违反 - 最高优先级
                 hardWorkCenterMatch(constraintFactory),
                 hardCapacityExceeded(constraintFactory),
+                hardOutsourcingProcedurePreviousTimeConstraint(constraintFactory),
+                hardOutsourcingProcedureNextTimeConstraint(constraintFactory),
 
                 // ============ 中等约束 (尽量满足) ============
                 // 重要业务规则 - 中等优先级
@@ -75,52 +77,14 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     }
 
     /**
-     * 硬约束2: 工作中心必须可用
-     * 违反条件：使用了状态不可用的工作中心
-     */
-    protected Constraint hardWorkCenterAvailability(ConstraintFactory constraintFactory) {
-        return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot ->
-                        timeslot.getWorkCenter() != null
-                                && STATUS_UNAVAILABLE.equals(timeslot.getWorkCenter().getStatus()))
-                .penalize(HardMediumSoftScore.ONE_HARD,
-                        timeslot -> HARD_PENALTY_WEIGHT * 5)
-                .asConstraint("硬约束：工作中心必须可用");
-    }
-
-    /**
-     * 硬约束3: 同一工作中心时间不能重叠
-     * 违反条件：同一工作中心在同一时间段安排了多个任务
-     */
-    protected Constraint hardNoOverlap(ConstraintFactory constraintFactory) {
-        return constraintFactory.forEachUniquePair(Timeslot.class,
-                        Joiners.equal(Timeslot::getWorkCenter),
-                        Joiners.overlapping(
-                                Timeslot::getStartTime,
-                                Timeslot::getEndTime
-                        ))
-                .penalize(HardMediumSoftScore.ONE_HARD,
-                        (t1, t2) -> {
-                            // 计算重叠时间，重叠越长惩罚越大
-                            LocalDateTime overlapStart = t1.getStartTime().isAfter(t2.getStartTime()) ?
-                                    t1.getStartTime() : t2.getStartTime();
-                            LocalDateTime overlapEnd = t1.getEndTime()
-                                    .isBefore(t2.getEndTime()) ?
-                                    t1.getEndTime() : t2.getEndTime();
-                            long overlapMinutes = Duration.between(
-                                    overlapStart, overlapEnd).toMinutes();
-                            return (int) overlapMinutes * HARD_PENALTY_WEIGHT;
-                        })
-                .asConstraint("硬约束：同一工作中心时间不能重叠");
-    }
-
-    /**
-     * 硬约束4: 不能超过维护容量
+     * 硬约束2: 不能超过维护容量
      * 违反条件：分配给某天维护的任务总时长超过维护容量
+     * 注意：工作中心为PM10W200的外协工序不考虑容量约束
      */
     protected Constraint hardCapacityExceeded(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getMaintenance() != null && timeslot.getDuration() > 0)
+                .filter(timeslot -> timeslot.getMaintenance() != null && timeslot.getDuration() > 0 &&
+                        (timeslot.getWorkCenter() == null || !WORK_CENTER_CODE.equals(timeslot.getWorkCenter().getWorkCenterCode())))
                 .groupBy(Timeslot::getMaintenance, sum(Timeslot::getDuration))
                 .filter((maintenance, totalDuration) ->
                         totalDuration + maintenance.getUsageTime() > maintenance.getCapacity())
@@ -133,15 +97,55 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     }
 
     /**
+     * 硬约束5: 外协工序时间约束 - 上一道工序结束时间必须等于该工序开始时间
+     * 仅适用于工作中心为PM10W200的外协工序
+     */
+    protected Constraint hardOutsourcingProcedurePreviousTimeConstraint(ConstraintFactory constraintFactory) {
+        return constraintFactory.forEach(Timeslot.class)
+                .filter(timeslot -> timeslot.getWorkCenter() != null &&
+                        WORK_CENTER_CODE.equals(timeslot.getWorkCenter().getWorkCenterCode()) &&
+                        timeslot.getProcedure() != null &&
+                        timeslot.getProcedure().getProcedureNo() > 1 &&
+                        timeslot.getStartTime() != null)
+                .join(Timeslot.class,
+                        Joiners.equal(t -> t.getTask().getTaskNo(), t -> t.getTask().getTaskNo()),
+                        Joiners.equal(t -> t.getProcedure().getIndex() - 1, t -> t.getProcedure().getIndex()))
+                .filter((current, previous) -> previous.getEndTime() != null && !previous.getEndTime().equals(current.getStartTime()))
+                .penalize(HardMediumSoftScore.ONE_HARD,
+                        (current, previous) -> HARD_PENALTY_WEIGHT * 10)
+                .asConstraint("硬约束：外协工序-上一道工序结束时间必须等于该工序开始时间");
+    }
+
+    /**
+     * 硬约束6: 外协工序时间约束 - 该工序结束时间必须等于下一道工序开始时间
+     * 仅适用于工作中心为PM10W200的外协工序
+     */
+    protected Constraint hardOutsourcingProcedureNextTimeConstraint(ConstraintFactory constraintFactory) {
+        return constraintFactory.forEach(Timeslot.class)
+                .filter(timeslot -> timeslot.getWorkCenter() != null &&
+                        WORK_CENTER_CODE.equals(timeslot.getWorkCenter().getWorkCenterCode()) &&
+                        timeslot.getProcedure() != null &&
+                        timeslot.getProcedure().getNextProcedureNo() != null && !
+                        timeslot.getProcedure().getNextProcedureNo().isEmpty() &&
+                        timeslot.getEndTime() != null)
+                .join(Timeslot.class,
+                        Joiners.equal(t -> t.getTask().getTaskNo(), t -> t.getTask().getTaskNo()),
+                        Joiners.filtering((current, next) -> next.getProcedure() != null &&
+                                current.getProcedure().getNextProcedureNo().contains(next.getProcedure().getProcedureNo())))
+                .filter((current, next) -> next.getStartTime() != null && !current.getEndTime().equals(next.getStartTime()))
+                .penalize(HardMediumSoftScore.ONE_HARD, (current, next) -> HARD_PENALTY_WEIGHT * 10)
+                .asConstraint("硬约束：外协工序-该工序结束时间必须等于下一道工序开始时间");
+    }
+
+    /**
      * 中等约束1: 工序顺序约束
      * 违反条件：后序工序在前序工序完成前开始
      */
     protected Constraint mediumProcedureSequence(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot ->
-                        timeslot.getProcedure() != null
-                                && timeslot.getEndTime() != null
-                                && !timeslot.getProcedure().getNextProcedure().isEmpty())
+                .filter(timeslot -> timeslot.getProcedure() != null &&
+                        timeslot.getEndTime() != null && !
+                        timeslot.getProcedure().getNextProcedure().isEmpty())
                 .join(Timeslot.class,
                         Joiners.equal(t -> t.getTask().getTaskNo(), t -> t.getTask().getTaskNo()),
                         Joiners.filtering((current, next) -> current.getProcedure().getNextProcedure().stream().anyMatch(p -> p.getId().equals(next.getProcedure().getId()))))
@@ -167,9 +171,9 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
                         Joiners.equal(Timeslot::getProcedure),
                         Joiners.equal(t -> t.getIndex() + 1, Timeslot::getIndex))
                 .filter((slice1, slice2) ->
-                        slice2.getStartTime() != null
-                                && slice1.getEndTime() != null
-                                && !slice1.getEndTime().isBefore(slice2.getStartTime()))
+                        slice2.getStartTime() != null &&
+                                slice1.getEndTime() != null && !
+                                slice1.getEndTime().isBefore(slice2.getStartTime()))
                 .penalize(HardMediumSoftScore.ONE_MEDIUM,
                         (slice1, slice2) -> MEDIUM_PENALTY_WEIGHT * 5)
                 .asConstraint("中约束：同一工序分片必须按顺序执行");
@@ -200,10 +204,9 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
      */
     protected Constraint softEarlyCompletion(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot ->
-                        timeslot.getEndTime() != null
-                                && timeslot.getProcedure() != null
-                                && timeslot.getProcedure().getPlanEndDate() != null)
+                .filter(timeslot -> timeslot.getEndTime() != null &&
+                        timeslot.getProcedure() != null &&
+                        timeslot.getProcedure().getPlanEndDate() != null)
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         timeslot -> {
                             LocalDateTime planEnd = timeslot.getProcedure().getPlanEndDate().atTime(23, 59);

@@ -114,7 +114,6 @@ public class SchedulingService {
     public void startScheduling(Long problemId, List<String> taskNos) {
         // 加载调度问题数据，包括订单、工序、时间槽等信息
         FactorySchedulingSolution problem = loadProblemWithSlices(taskNos, problemId);
-
         // 使用求解器管理器创建求解作业并监听进度
         SolverJob<FactorySchedulingSolution, Long> solverJob = solverManager.solveAndListen(
                 problemId,  // 问题标识
@@ -153,7 +152,7 @@ public class SchedulingService {
                 timeslotValidates.add(timeslotValidate);
                 continue;
             }
-            if(timeslot.getWorkCenter() != null&&timeslot.getDuration()>480){
+            if (timeslot.getWorkCenter() != null && timeslot.getDuration() > 480) {
                 TimeslotValidate timeslotValidate = new TimeslotValidate();
             }
         }
@@ -230,11 +229,9 @@ public class SchedulingService {
      * @return FactorySchedulingSolution - 包含所有调度所需数据的问题实例
      */
     private FactorySchedulingSolution loadProblem(List<String> taskNos, Long problemId) {
-        // 获取时间槽数据
-        List<Timeslot> timeslots = new ArrayList<>();
         List<WorkCenter> workCenters = new ArrayList<>();
         // 查找与订单相关的所有时间槽并设置问题ID
-        timeslots = timeslotService.findAllByTaskIn(taskNos).stream().peek(timeslot -> {
+        List<Timeslot> timeslots = timeslotService.findAllByTaskIn(taskNos).stream().peek(timeslot -> {
             if (timeslot.getWorkCenter() != null) {
                 workCenters.add(timeslot.getWorkCenter());
             }
@@ -243,8 +240,6 @@ public class SchedulingService {
                 timeslot.setManual(true);
             }
         }).filter(timeslot -> timeslot.getWorkCenter() != null).collect(Collectors.toList());
-        // 获取设备维护计划
-        List<WorkCenterMaintenance> maintenances = new ArrayList<>();
         // 确定时间范围（基于订单的计划开始和结束日期）
         LocalDate start = timeslots.stream().map(Timeslot::getOrder)
                 .map(Order::getPlanStartDate)
@@ -254,7 +249,7 @@ public class SchedulingService {
                 .map(Order::getPlanEndDate)
                 .max(LocalDate::compareTo)
                 .orElse(LocalDate.now());
-        maintenances = maintenanceService.findAllByMachineInAndDateBetween(workCenters, start, end.plusDays(10));
+        List<WorkCenterMaintenance> maintenances = maintenanceService.findAllByMachineInAndDateBetween(workCenters, start, end.plusDays(10));
         return new FactorySchedulingSolution(timeslots, maintenances);
     }
 

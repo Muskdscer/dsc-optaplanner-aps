@@ -50,15 +50,15 @@ public class Timeslot implements Serializable {
     //优先级
     private Integer priority;
 
-    @ShadowVariable(variableListenerClass = TimeslotVariableListener.class, sourceVariableName = "maintenance", sourceEntityClass = Timeslot.class)
     //规划开始时间
+    @ShadowVariable(variableListenerClass = TimeslotVariableListener.class, sourceVariableName = "maintenance", sourceEntityClass = Timeslot.class)
     private LocalDateTime startTime;
 
     private LocalDateTime endTime;
 
-    @PlanningVariable(valueRangeProviderRefs = "maintenanceRange")
-    @OneToOne(fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     //绑定的工作中心日历
+    @PlanningVariable(valueRangeProviderRefs = "maintenanceRange")
+    @OneToOne(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REFRESH})
     private WorkCenterMaintenance maintenance;
 
     //当前工序是否为并行工序
