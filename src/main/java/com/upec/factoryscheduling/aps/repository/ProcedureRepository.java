@@ -10,10 +10,7 @@ import java.util.List;
 @Repository
 public interface ProcedureRepository extends JpaRepository<Procedure, String> , JpaSpecificationExecutor<Procedure> {
 
+    List<Procedure> findAllByTask_TaskNoIsIn(List<String> taskNos);
 
-    List<Procedure> findAllByIdIsIn(List<String> ids);
-
-    List<Procedure> findAllByTaskNoIsIn(List<String> taskNos);
-
-    List<Procedure> findAllByTaskNo(String taskNo);
+    List<Procedure> findAllByTask_TaskNo(String taskNo);
 }

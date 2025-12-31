@@ -13,7 +13,7 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
-import static org.optaplanner.core.api.score.stream.ConstraintCollectors.*;
+import static org.optaplanner.core.api.score.stream.ConstraintCollectors.sum;
 
 @Slf4j
 @Component
@@ -70,8 +70,8 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
         return constraintFactory.forEach(Timeslot.class)
                 .filter(timeslot ->
                         timeslot.getMaintenance() != null
-                                && timeslot.getWorkCenter() != null
-                                && !timeslot.getMaintenance().getWorkCenter().getId().equals(timeslot.getWorkCenter().getId()))
+                                && timeslot.getProcedure().getWorkCenter() != null
+                                && !timeslot.getMaintenance().getWorkCenter().getId().equals(timeslot.getProcedure().getWorkCenter().getId()))
                 .penalize(HardMediumSoftScore.ONE_HARD, timeslot -> HARD_PENALTY_WEIGHT * 10) // 严重违反
                 .asConstraint("硬约束：工作中心必须匹配");
     }
@@ -84,7 +84,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     protected Constraint hardCapacityExceeded(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
                 .filter(timeslot -> timeslot.getMaintenance() != null && timeslot.getDuration() > 0 &&
-                        (timeslot.getWorkCenter() == null || !WORK_CENTER_CODE.equals(timeslot.getWorkCenter().getWorkCenterCode())))
+                        (timeslot.getProcedure().getWorkCenter() == null || !WORK_CENTER_CODE.equals(timeslot.getProcedure().getWorkCenter().getWorkCenterCode())))
                 .groupBy(Timeslot::getMaintenance, sum(Timeslot::getDuration))
                 .filter((maintenance, totalDuration) ->
                         totalDuration + maintenance.getUsageTime() > maintenance.getCapacity())
@@ -102,13 +102,13 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
      */
     protected Constraint hardOutsourcingProcedurePreviousTimeConstraint(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getWorkCenter() != null &&
-                        WORK_CENTER_CODE.equals(timeslot.getWorkCenter().getWorkCenterCode()) &&
+                .filter(timeslot -> timeslot.getProcedure().getWorkCenter() != null &&
+                        WORK_CENTER_CODE.equals(timeslot.getProcedure().getWorkCenter().getWorkCenterCode()) &&
                         timeslot.getProcedure() != null &&
                         timeslot.getProcedure().getProcedureNo() > 1 &&
                         timeslot.getStartTime() != null)
                 .join(Timeslot.class,
-                        Joiners.equal(t -> t.getTask().getTaskNo(), t -> t.getTask().getTaskNo()),
+                        Joiners.equal(t -> t.getProcedure().getTask().getTaskNo(), t -> t.getProcedure().getTask().getTaskNo()),
                         Joiners.equal(t -> t.getProcedure().getIndex() - 1, t -> t.getProcedure().getIndex()))
                 .filter((current, previous) -> previous.getEndTime() != null && !previous.getEndTime().equals(current.getStartTime()))
                 .penalize(HardMediumSoftScore.ONE_HARD,
@@ -122,14 +122,14 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
      */
     protected Constraint hardOutsourcingProcedureNextTimeConstraint(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot -> timeslot.getWorkCenter() != null &&
-                        WORK_CENTER_CODE.equals(timeslot.getWorkCenter().getWorkCenterCode()) &&
+                .filter(timeslot -> timeslot.getProcedure().getWorkCenter() != null &&
+                        WORK_CENTER_CODE.equals(timeslot.getProcedure().getWorkCenter().getWorkCenterCode()) &&
                         timeslot.getProcedure() != null &&
                         timeslot.getProcedure().getNextProcedureNo() != null && !
                         timeslot.getProcedure().getNextProcedureNo().isEmpty() &&
                         timeslot.getEndTime() != null)
                 .join(Timeslot.class,
-                        Joiners.equal(t -> t.getTask().getTaskNo(), t -> t.getTask().getTaskNo()),
+                        Joiners.equal(t -> t.getProcedure().getTask().getTaskNo(), t -> t.getProcedure().getTask().getTaskNo()),
                         Joiners.filtering((current, next) -> next.getProcedure() != null &&
                                 current.getProcedure().getNextProcedureNo().contains(next.getProcedure().getProcedureNo())))
                 .filter((current, next) -> next.getStartTime() != null && !current.getEndTime().equals(next.getStartTime()))
@@ -147,7 +147,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
                         timeslot.getEndTime() != null && !
                         timeslot.getProcedure().getNextProcedure().isEmpty())
                 .join(Timeslot.class,
-                        Joiners.equal(t -> t.getTask().getTaskNo(), t -> t.getTask().getTaskNo()),
+                        Joiners.equal(t -> t.getProcedure().getTask().getTaskNo(), t -> t.getProcedure().getTask().getTaskNo()),
                         Joiners.filtering((current, next) -> current.getProcedure().getNextProcedure().stream().anyMatch(p -> p.getId().equals(next.getProcedure().getId()))))
                 .filter((current, next) ->
                         next.getStartTime() != null && !current.getEndTime().isBefore(next.getStartTime()))
@@ -186,13 +186,14 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     protected Constraint mediumOrderDateConstraint(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
                 .filter(timeslot ->
-                        timeslot.getTask() != null
-                                && timeslot.getTask().getFactStartDate() != null
+                        timeslot.getProcedure().getTask() != null
+                                && timeslot.getProcedure().getTask().getFactStartDate() != null
                                 && timeslot.getStartTime() != null
-                                && timeslot.getStartTime().isBefore(timeslot.getTask().getFactStartDate()))
+                                && timeslot.getStartTime().isBefore(timeslot.getProcedure().getTask().getFactStartDate()))
                 .penalize(HardMediumSoftScore.ONE_MEDIUM,
                         timeslot -> {
-                            long daysEarly = Duration.between(timeslot.getStartTime(), timeslot.getTask().getFactStartDate()).toDays();
+                            long daysEarly =
+                                    Duration.between(timeslot.getStartTime(), timeslot.getProcedure().getTask().getFactStartDate()).toDays();
                             return (int) daysEarly * MEDIUM_PENALTY_WEIGHT;
                         })
                 .asConstraint("中约束：不能早于实际开始时间");
@@ -226,14 +227,13 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
      */
     protected Constraint softOnTimeStart(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
-                .filter(timeslot ->
-                        timeslot.getStartTime() != null
-                                && timeslot.getTask() != null
-                                && timeslot.getTask().getPlanStartDate() != null
-                                && timeslot.getProcedureIndex() == 1)
+                .filter(timeslot -> timeslot.getStartTime() != null &&
+                        timeslot.getProcedure().getTask() != null &&
+                        timeslot.getProcedure().getTask().getPlanStartDate() != null &&
+                        timeslot.getProcedureIndex() == 1)
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         timeslot -> {
-                            LocalDateTime planStart = timeslot.getTask().getPlanStartDate().atStartOfDay();
+                            LocalDateTime planStart = timeslot.getProcedure().getTask().getPlanStartDate().atStartOfDay();
                             LocalDateTime actualStart = timeslot.getStartTime();
                             long hoursDiff = Math.abs(Duration.between(planStart, actualStart).toHours());
                             if (hoursDiff <= 4) {
@@ -273,8 +273,8 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
     protected Constraint softBalancedLoad(ConstraintFactory constraintFactory) {
         return constraintFactory.forEach(Timeslot.class)
                 .filter(timeslot ->
-                        timeslot.getWorkCenter() != null && timeslot.getDuration() > 0)
-                .groupBy(Timeslot::getWorkCenter, sum(Timeslot::getDuration))
+                        timeslot.getProcedure().getWorkCenter() != null && timeslot.getDuration() > 0)
+                .groupBy(timeslot -> timeslot.getProcedure().getWorkCenter().getWorkCenterCode(), sum(Timeslot::getDuration))
                 .reward(HardMediumSoftScore.ONE_SOFT,
                         (workCenter, totalDuration) -> {
                             int deviation = Math.abs(totalDuration - AVERAGE_DAILY_LOAD);
@@ -283,8 +283,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
                                 return (maxDeviation - deviation) / 100;
                             }
                             return 0;
-                        })
-                .asConstraint("软约束：奖励均衡负载");
+                        }).asConstraint("软约束：奖励均衡负载");
     }
 
     /**
@@ -308,8 +307,7 @@ public class FactorySchedulingConstraintProvider implements ConstraintProvider, 
                                 return SOFT_REWARD_WEIGHT;
                             }
                             return 0;
-                        })
-                .asConstraint("软约束：奖励连续分片");
+                        }).asConstraint("软约束：奖励连续分片");
     }
 
     /**

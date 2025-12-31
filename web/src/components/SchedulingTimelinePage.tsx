@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
-import {Card, message, Spin, Table, Tag, Tooltip} from 'antd';
+import {Card, InputNumber, message, Modal, Spin, Table, Tag, Tooltip} from 'antd';
 import type {ColumnType} from 'antd/es/table';
-import {getTimeslotList} from '../services/api';
+import {getTimeslotList, splitOutsourcingTimeslot} from '../services/api';
 import type {Procedure, Timeslot} from '../services/model';
 import moment from 'moment';
 
@@ -19,6 +19,10 @@ const SchedulingTimelinePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [tableData, setTableData] = useState<TableData[]>([]);
   const [dateColumns, setDateColumns] = useState<string[]>([]);
+  // 弹窗状态管理
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [currentTimeslotId, setCurrentTimeslotId] = useState("");
+  const [days, setDays] = useState(0);
 
   // 格式化工序详情
   const formatProcedureDetail = (timeslot: Timeslot) => {
@@ -63,6 +67,13 @@ const SchedulingTimelinePage: React.FC = () => {
     const tensDigit = Math.floor(procedure.procedureNo / 10);
     const index = tensDigit % colors.length;
     return colors[index];
+  };
+
+  // 显示拆分弹窗
+  const showSplitModal = (timeslotId: string) => {
+    setCurrentTimeslotId(timeslotId);
+    setDays(0); // 重置天数为0
+    setIsModalVisible(true);
   };
 
   // 渲染单元格内容
@@ -133,7 +144,19 @@ const SchedulingTimelinePage: React.FC = () => {
                   e.currentTarget.style.borderColor = '#e8e8e8';
                 }}
               >
-                <div style={{ fontWeight: 'bold', color: '#333', marginBottom: '2px' }}>
+                <div 
+                  style={{ 
+                    fontWeight: 'bold', 
+                    color: '#333', 
+                    marginBottom: '2px',
+                    cursor: ts.workCenter?.workCenterCode === "PM10W200" ? 'pointer' : 'default'
+                  }}
+                  onClick={() => {
+                    if (ts.workCenter?.workCenterCode === "PM10W200") {
+                      showSplitModal(ts.id);
+                    }
+                  }}
+                >
                   {ts.procedure?.procedureName || '未知'}（{ts.procedure?.procedureNo || '未知'}）
                 </div>
                 {currentDate && (
@@ -198,87 +221,88 @@ const SchedulingTimelinePage: React.FC = () => {
     return columns;
   };
 
-  useEffect(() => {
-    // 获取时间槽跨越的所有日期
-    const getDatesInRange = (startTime: string, endTime: string): string[] => {
-      const startDate = moment(startTime.substring(0, 10));
-      const endDate = moment(endTime.substring(0, 10));
-      const dates: string[] = [];
-      
-      const currentDate = moment(startDate);
-      while (currentDate.isSameOrBefore(endDate, 'day')) {
-        dates.push(currentDate.format('YYYY-MM-DD'));
-        currentDate.add(1, 'day');
+  // 获取时间槽跨越的所有日期
+  const getDatesInRange = (startTime: string, endTime: string): string[] => {
+    const startDate = moment(startTime.substring(0, 10));
+    const endDate = moment(endTime.substring(0, 10));
+    const dates: string[] = [];
+    
+    const currentDate = moment(startDate);
+    while (currentDate.isSameOrBefore(endDate, 'day')) {
+      dates.push(currentDate.format('YYYY-MM-DD'));
+      currentDate.add(1, 'day');
+    }
+    
+    return dates;
+  };
+
+  // 根据任务号分组数据
+  const groupTimeslotsByTask = (timeslots: Timeslot[]): TaskData => {
+    return timeslots.reduce((acc, timeslot) => {
+      // 空值检查
+      if (!timeslot.task || !timeslot.procedure || !timeslot.startTime || !timeslot.endTime) {
+        return acc;
       }
       
-      return dates;
-    };
-
-    // 根据任务号分组数据
-    const groupTimeslotsByTask = (timeslots: Timeslot[]): TaskData => {
-      return timeslots.reduce((acc, timeslot) => {
-        // 空值检查
-        if (!timeslot.task || !timeslot.procedure || !timeslot.startTime || !timeslot.endTime) {
-          return acc;
-        }
-        
-        const key = timeslot.task.taskNo;
-        if (!acc[key]) {
-          acc[key] = { timeslots: [], dateMap: new Map() };
-        }
-        acc[key].timeslots.push(timeslot);
-        
-        // 按日期分组时间槽
-        const dates = getDatesInRange(timeslot.startTime, timeslot.endTime);
-        dates.forEach(date => {
-          if (!acc[key].dateMap.has(date)) {
-            acc[key].dateMap.set(date, []);
-          }
-          acc[key].dateMap.get(date)?.push(timeslot);
-        });
-        
-        return acc;
-      }, {} as TaskData);
-    };
-
-    // 提取所有日期
-    const extractDates = (timeslots: Timeslot[]): string[] => {
-      const dateSet = new Set<string>();
+      const key = timeslot.task.taskNo;
+      if (!acc[key]) {
+        acc[key] = { timeslots: [], dateMap: new Map() };
+      }
+      acc[key].timeslots.push(timeslot);
       
-      timeslots.forEach(timeslot => {
-        if (timeslot.startTime) {
-          const startDate = timeslot.startTime.substring(0, 10);
-          dateSet.add(startDate);
+      // 按日期分组时间槽
+      const dates = getDatesInRange(timeslot.startTime, timeslot.endTime);
+      dates.forEach(date => {
+        if (!acc[key].dateMap.has(date)) {
+          acc[key].dateMap.set(date, []);
         }
-        if (timeslot.endTime) {
-          const endDate = timeslot.endTime.substring(0, 10);
-          dateSet.add(endDate);
-        }
+        acc[key].dateMap.get(date)?.push(timeslot);
       });
       
-      // 按日期排序
-      return Array.from(dateSet).sort();
-    };
+      return acc;
+    }, {} as TaskData);
+  };
 
-    // 构建表格数据
-    const buildTableData = (groupedData: TaskData, dates: string[]): TableData[] => {
-      return Object.entries(groupedData).map(([, data]) => {
-        // 从第一个timeslot中直接获取taskNo
-        const firstTimeslot = data.timeslots[0];
-        const taskNo = firstTimeslot?.task?.taskNo || '';
-        const row: TableData = {
-          key: taskNo, // 将任务号作为key
-          taskNo
-        };
-        
-        // 为每个日期添加列数据
-        dates.forEach(date => {
-            row[date] = data.dateMap.get(date) || [];
-        });
-        
-        return row;
+  // 提取所有日期
+  const extractDates = (timeslots: Timeslot[]): string[] => {
+    const dateSet = new Set<string>();
+    
+    timeslots.forEach(timeslot => {
+      if (timeslot.startTime) {
+        const startDate = timeslot.startTime.substring(0, 10);
+        dateSet.add(startDate);
+      }
+      if (timeslot.endTime) {
+        const endDate = timeslot.endTime.substring(0, 10);
+        dateSet.add(endDate);
+      }
+    });
+    
+    // 按日期排序
+    return Array.from(dateSet).sort();
+  };
+
+  // 构建表格数据
+  const buildTableData = (groupedData: TaskData, dates: string[]): TableData[] => {
+    return Object.entries(groupedData).map(([, data]) => {
+      // 从第一个timeslot中直接获取taskNo
+      const firstTimeslot = data.timeslots[0];
+      const taskNo = firstTimeslot?.task?.taskNo || '';
+      const row: TableData = {
+        key: taskNo, // 将任务号作为key
+        taskNo
+      };
+      
+      // 为每个日期添加列数据
+      dates.forEach(date => {
+          row[date] = data.dateMap.get(date) || [];
       });
-    };
+      
+      return row;
+    });
+  };
+
+  useEffect(() => {
 
     // 获取数据并预处理
     const fetchData = async () => {
@@ -298,17 +322,51 @@ const SchedulingTimelinePage: React.FC = () => {
           const table = buildTableData(grouped, dates);
           setTableData(table);
         } else {
-          message.error('获取数据失败: ' + apiResponse.msg);
+          message.error('网络请求失败');
         }
       } catch {
-      message.error('网络请求失败');
-    } finally {
+        message.error('网络请求失败');
+      } finally {
         setLoading(false);
       }
     };
 
     fetchData();
   }, []);
+
+  // 处理弹窗确认
+  const handleOk = async () => {
+    if (days <= 0) {
+      message.warning('请输入大于0的天数');
+      return;
+    }
+
+    try {
+      await splitOutsourcingTimeslot(currentTimeslotId, days);
+      message.success('拆分成功');
+      setIsModalVisible(false);
+      // 刷新数据
+      const response = await getTimeslotList();
+      const apiResponse = response as unknown as { code: number; msg: string; data: { timeslots: Timeslot[] } };
+      if (apiResponse.code === 200) {
+        const timeslots = apiResponse.data.timeslots;
+        // 重新构建表格数据
+        const grouped = groupTimeslotsByTask(timeslots);
+        const dates = extractDates(timeslots);
+        setDateColumns(dates);
+        setTableData(buildTableData(grouped, dates));
+      } else {
+        message.error('获取数据失败: ' + apiResponse.msg);
+      }
+    } catch (error) {
+      message.error('拆分失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    }
+  };
+
+  // 处理弹窗取消
+  const handleCancel = () => {
+    setIsModalVisible(false);
+  };
 
   return (
     <div style={{ padding: '20px' }}>
@@ -333,6 +391,27 @@ const SchedulingTimelinePage: React.FC = () => {
           </div>
         )}
       </Spin>
+
+      {/* 外协工序时间槽拆分弹窗 */}
+      <Modal
+        title="输入预计完成天数"
+        open={isModalVisible}
+        onOk={handleOk}
+        onCancel={handleCancel}
+        okText="确认"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>预计完成天数：</label>
+          <InputNumber
+            min={1}
+            value={days}
+            onChange={(value) => setDays(value || 0)}
+            style={{ width: '100%' }}
+            placeholder="请输入天数"
+          />
+        </div>
+      </Modal>
     </div>
   );
 };

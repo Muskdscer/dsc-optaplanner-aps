@@ -11,14 +11,18 @@ import com.upec.factoryscheduling.mes.repository.MesOrderRepository;
 import com.xkzhangsan.time.utils.CollectionUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.parameters.P;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -26,8 +30,6 @@ import java.util.stream.Collectors;
 public class MesOrderService {
 
 
-    private MesOrderRepository mesOrderRepository;
-    private MesBaseWorkCenterService mesBaseWorkCenterService;
     private MesJjOrderTaskService mesJjOrderTaskService;
     private MesJjProcedureService mesJjProcedureService;
     private OrderService orderService;
@@ -35,19 +37,6 @@ public class MesOrderService {
     private ProcedureService procedureService;
     private WorkCenterService workCenterService;
     private TimeslotService timeslotService;
-    private ApsWorkCenterMaintenanceService apsWorkCenterMaintenanceService;
-    private WorkCenterMaintenanceService workCenterMaintenanceService;
-    private MesJjRouteProcedureService mesJjRouteProcedureService;
-
-    @Autowired
-    public void setMesOrderRepository(MesOrderRepository mesOrderRepository) {
-        this.mesOrderRepository = mesOrderRepository;
-    }
-
-    @Autowired
-    private void setMesBaseWorkCenterService(MesBaseWorkCenterService mesBaseWorkCenterService) {
-        this.mesBaseWorkCenterService = mesBaseWorkCenterService;
-    }
 
     @Autowired
     private void setMesJjOrderTaskService(MesJjOrderTaskService mesJjOrderTaskService) {
@@ -84,59 +73,32 @@ public class MesOrderService {
         this.workCenterService = workCenterService;
     }
 
-
-    @Autowired
-    public void setApsWorkCenterMaintenanceService(ApsWorkCenterMaintenanceService apsWorkCenterMaintenanceService) {
-        this.apsWorkCenterMaintenanceService = apsWorkCenterMaintenanceService;
-    }
-
-    @Autowired
-    public void setWorkCenterMaintenanceService(WorkCenterMaintenanceService workCenterMaintenanceService) {
-        this.workCenterMaintenanceService = workCenterMaintenanceService;
-    }
-
-    @Autowired
-    public void setMesJjRouteProcedureService(MesJjRouteProcedureService mesJjRouteProcedureService) {
-        this.mesJjRouteProcedureService = mesJjRouteProcedureService;
-    }
-
-    public List<Timeslot> mergePlannerData(List<String> taskNos) {
-
-        List<MesJjOrderTask> mesOrderTasks = getOrderTasks(taskNos);
-        List<MesJjOrder> mesOrders =
-                getMesOrders(mesOrderTasks.stream().map(MesJjOrderTask::getOrderNo).distinct().collect(Collectors.toList()));
+    public List<Timeslot> mergePlannerData(List<Order> orders) {
+        List<MesJjOrderTask> mesOrderTasks = getOrderTasks(orders);
         List<MesJjProcedure> mesProcedures = getProcedures(mesOrderTasks);
-        List<String> workCenterCodes =
-                mesProcedures.stream().map(MesJjProcedure::getWorkCenterSeq).distinct().collect(Collectors.toList());
-        List<MesBaseWorkCenter> mesBaseWorkCenters = mesBaseWorkCenterService.findByIdIn(workCenterCodes);
-        List<ApsWorkCenterMaintenance> apsWorkCenterMaintenances =
-                apsWorkCenterMaintenanceService.findAllByWorkCenterCodeIn(mesBaseWorkCenters.stream()
-                        .map(MesBaseWorkCenter::getWorkCenterCode).distinct().collect(Collectors.toList()));
-        List<WorkCenter> workCenters = convertWorkCenters(mesBaseWorkCenters);
-        convertMaintenance(apsWorkCenterMaintenances, workCenters);
-        List<Order> orders = convertOrders(mesOrders);
+        List<WorkCenter> workCenters = workCenterService.getAllMachines();
         List<Task> tasks = convertTasks(mesOrderTasks);
-        List<Procedure> procedures = convertProcedures(mesProcedures.stream().distinct().collect(Collectors.toList()), workCenters);
-        List<Timeslot> timeslots = new ArrayList<>();
         Map<String, Order> orderMap = orders.stream().collect(Collectors.toMap(Order::getOrderNo, order -> order));
         Map<String, Task> taskMap = tasks.stream().collect(Collectors.toMap(Task::getTaskNo, task -> task));
+        List<Procedure> procedures = convertProcedures(
+                mesProcedures.stream().distinct().collect(Collectors.toList()),
+                workCenters,
+                orderMap,
+                taskMap);
+        List<Timeslot> timeslots = new ArrayList<>();
         for (Procedure procedure : procedures) {
-            timeslots.add(createTimeslot(procedure, orderMap.get(procedure.getOrderNo()), taskMap.get(procedure.getTaskNo())));
+            timeslots.add(createTimeslot(procedure));
         }
         return timeslotService.saveTimeslot(timeslots);
     }
 
-    private Timeslot createTimeslot(Procedure procedure, Order order, Task task) {
+    private Timeslot createTimeslot(Procedure procedure) {
         Timeslot timeslot = new Timeslot();
-        timeslot.setId(procedure.getTaskNo() + "_" + procedure.getProcedureNo() + "_" + 1);
+        timeslot.setId(procedure.getTask().getTaskNo() + "_" + procedure.getProcedureNo() + "_" + 1);
         timeslot.setProcedure(procedure);
-        timeslot.setWorkCenter(procedure.getWorkCenterId());
-        timeslot.setOrder(order);
-        timeslot.setTask(task);
         timeslot.setStartTime(procedure.getStartTime());
-        timeslot.setEndTime(procedure.getEndTime());
-        if (task != null) {
-            timeslot.setPriority(timeslot.getTask().getPriority());
+        if (procedure.getTask() != null) {
+            timeslot.setPriority(timeslot.getProcedure().getTask().getPriority());
         }
         timeslot.setIndex(1);
         timeslot.setTotal(1);
@@ -146,16 +108,16 @@ public class MesOrderService {
         if (procedure.getStartTime() != null && procedure.getEndTime() != null) {
             timeslot.setManual(true);
             timeslot.setStartTime(procedure.getStartTime());
-            timeslot.setEndTime(procedure.getEndTime());
         }
         return timeslot;
     }
 
 
-    private List<MesJjOrderTask> getOrderTasks(List<String> taskNos) {
+    private List<MesJjOrderTask> getOrderTasks(List<Order> orders) {
         List<MesJjOrderTask> orderTasks = new ArrayList<>();
-        Lists.partition(taskNos, 999).forEach(taskNo -> {
-            orderTasks.addAll(mesJjOrderTaskService.queryAllByTaskNoInAndTaskStatusIn(taskNo, List.of("生产中", "待生产")));
+        Lists.partition(orders, 999).forEach(taskNo -> {
+            List<String> orderNos = taskNo.stream().filter(Objects::nonNull).map(Order::getOrderNo).collect(Collectors.toList());
+            orderTasks.addAll(mesJjOrderTaskService.queryAllByOrderNoInAndTaskStatusIn(orderNos, List.of("生产中", "待生产")));
         });
         return orderTasks;
     }
@@ -170,61 +132,6 @@ public class MesOrderService {
         return procedures;
     }
 
-    private List<MesJjRouteProcedure> getRouteProcedures(List<MesJjProcedure> procedures) {
-        List<String> routeSeqs = procedures.stream().map(MesJjProcedure::getRouteSeq).distinct().collect(Collectors.toList());
-        List<MesJjRouteProcedure> routeProcedures = new ArrayList<>();
-        Lists.partition(routeSeqs, 999).forEach(routeSeq -> {
-            routeProcedures.addAll(mesJjRouteProcedureService.findAllByRouteSeqIn(routeSeq));
-        });
-        return routeProcedures;
-    }
-
-
-    private List<WorkCenterMaintenance> convertMaintenance(List<ApsWorkCenterMaintenance> apsWorkCenterMaintenances,
-                                                           List<WorkCenter> workCenters) {
-        Map<String, WorkCenter> workCenterMap =
-                workCenters.stream().collect(Collectors.toMap(WorkCenter::getWorkCenterCode, workCenter -> workCenter));
-        List<WorkCenterMaintenance> maintenances = new ArrayList<>();
-        for (ApsWorkCenterMaintenance apsWorkCenterMaintenance : apsWorkCenterMaintenances) {
-            WorkCenterMaintenance maintenance = new WorkCenterMaintenance();
-            maintenance.setYear(DateUtils.parseLocalDate(apsWorkCenterMaintenance.getLocalDate()).getYear());
-            maintenance.setCapacity(apsWorkCenterMaintenance.getCapacity());
-            maintenance.setDate(DateUtils.parseLocalDate(apsWorkCenterMaintenance.getLocalDate()));
-            maintenance.setWorkCenter(workCenterMap.get(apsWorkCenterMaintenance.getWorkCenterCode()));
-            maintenance.setStartTime(DateUtils.parseDateTime(apsWorkCenterMaintenance.getStartTime()).toLocalTime());
-            maintenance.setEndTime(DateUtils.parseDateTime(apsWorkCenterMaintenance.getEndTime()).toLocalTime());
-            maintenance.setStatus(apsWorkCenterMaintenance.getStatus());
-            maintenance.setId(RandomFun.getInstance().getRandom());
-            maintenance.setDescription(apsWorkCenterMaintenance.getDescription());
-            maintenances.add(maintenance);
-        }
-        return workCenterMaintenanceService.createMachineMaintenance(maintenances);
-    }
-
-    private List<Order> convertOrders(List<MesJjOrder> mesOrders) {
-        List<Order> orders = new ArrayList<>();
-        for (MesJjOrder mesOrder : mesOrders) {
-            Order order = new Order();
-            order.setOrderNo(mesOrder.getOrderNo());
-            order.setOrderStatus(mesOrder.getOrderStatus());
-            order.setErpStatus(mesOrder.getErpStatus());
-            if (StringUtils.hasLength(mesOrder.getPlanStartDate())) {
-                order.setPlanStartDate(DateUtils.parseLocalDate(mesOrder.getPlanStartDate()));
-            }
-            if (StringUtils.hasLength(mesOrder.getPlanEndDate())) {
-                order.setPlanEndDate(DateUtils.parseLocalDate(mesOrder.getPlanEndDate()));
-            }
-            if (StringUtils.hasLength(mesOrder.getFactStartDate())) {
-                order.setFactStartDate(DateUtils.parseDateTime(mesOrder.getFactStartDate()));
-            }
-            if (StringUtils.hasLength(mesOrder.getFactEndDate())) {
-                order.setFactEndDate(DateUtils.parseDateTime(mesOrder.getFactEndDate()));
-            }
-            orders.add(order);
-        }
-        return orderService.saveAll(orders);
-    }
-
     private List<Task> convertTasks(List<MesJjOrderTask> mesOrderTasks) {
         List<Task> tasks = new ArrayList<>();
         for (MesJjOrderTask orderTask : mesOrderTasks) {
@@ -232,6 +139,7 @@ public class MesOrderService {
             task.setOrderNo(orderTask.getOrderNo());
             task.setTaskNo(orderTask.getTaskNo());
             task.setStatus(orderTask.getTaskStatus());
+            task.setCreateDate(DateUtils.parseDateTime(orderTask.getCreateDate()));
             if (StringUtils.hasLength(orderTask.getPlanStartDate())) {
                 task.setPlanStartDate(DateUtils.parseLocalDate(orderTask.getPlanStartDate()));
             }
@@ -247,34 +155,39 @@ public class MesOrderService {
             if (StringUtils.hasLength(orderTask.getMark())) {
                 task.setPriority(100);
             }
+            if (StringUtils.hasLength(orderTask.getPlanQuantity())) {
+                task.setPlanQuantity(Integer.parseInt(orderTask.getPlanQuantity()));
+            }
+            if (StringUtils.hasLength(orderTask.getLockedRemark())) {
+                task.setLockedRemark(orderTask.getLockedRemark());
+            }
+            if (StringUtils.hasLength(orderTask.getRouteSeq())) {
+                task.setRouteId(orderTask.getRouteSeq());
+            }
             tasks.add(task);
         }
         return orderTaskService.saveAll(tasks);
     }
 
-    private List<Procedure> convertProcedures(List<MesJjProcedure> mesProcedures, List<WorkCenter> workCenters) {
-        Map<String, WorkCenter> workCenterMap =
-                workCenters.stream().collect(Collectors.toMap(WorkCenter::getId, workCenter -> workCenter));
-        List<MesJjRouteProcedure> routeProcedures = getRouteProcedures(mesProcedures);
-        Map<String, MesJjRouteProcedure> routeProcedureMap = routeProcedures.stream()
-                .collect(Collectors.toMap(m -> m.getRouteSeq() + "_" + m.getProcedureNo(), m -> m));
+    private List<Procedure> convertProcedures(List<MesJjProcedure> mesProcedures, List<WorkCenter> workCenters,
+                                              Map<String, Order> orders, Map<String, Task> tasks) {
+        Map<String, WorkCenter> workCenterMap = workCenters.stream().collect(Collectors.toMap(WorkCenter::getId, workCenter -> workCenter));
         List<Procedure> procedures = new ArrayList<>();
-
         for (MesJjProcedure mesProcedure : mesProcedures) {
             if (mesProcedure.getProcedureNo().equals("15")) {
                 continue;
             }
-            MesJjRouteProcedure routeProcedure =
-                    routeProcedureMap.get(mesProcedure.getRouteSeq() + "_" + mesProcedure.getProcedureNo());
             Procedure procedure = new Procedure();
             Integer procedureNo = Integer.parseInt(mesProcedure.getProcedureNo());
             procedure.setId(mesProcedure.getSeq());
-            procedure.setOrderNo(mesProcedure.getOrderNo());
-            procedure.setTaskNo(mesProcedure.getTaskNo());
-            procedure.setWorkCenterId(workCenterMap.get(mesProcedure.getWorkCenterSeq()));
             procedure.setProcedureName(mesProcedure.getProcedureName());
             procedure.setStatus(mesProcedure.getProcedureStatus());
             procedure.setProcedureNo(procedureNo);
+            procedure.setWorkCenter(workCenterMap.get(mesProcedure.getWorkCenterSeq()));
+            procedure.setOrder(orders.get(mesProcedure.getOrderNo()));
+            procedure.setTask(tasks.get(mesProcedure.getTaskNo()));
+            procedure.setProcedureType(mesProcedure.getProcedureType());
+            procedure.setCreateDate(DateUtils.parseDateTime(mesProcedure.getCreatedate()));
             if (StringUtils.hasLength(mesProcedure.getNextProcedureNo())) {
                 String[] nextProcedureNos = mesProcedure.getNextProcedureNo().split(",");
                 List<Integer> numbers = new ArrayList<>();
@@ -295,21 +208,27 @@ public class MesOrderService {
             if (StringUtils.hasLength(mesProcedure.getFactEndDate())) {
                 procedure.setEndTime(DateUtils.parseDateTime(mesProcedure.getFactEndDate()));
             }
-            if (routeProcedure != null && routeProcedure.getMachineHours() != null) {
-                procedure.setMachineMinutes((int) (Double.parseDouble(routeProcedure.getMachineHours()) * 60));
+            if (mesProcedure.getMachineHours() != null) {
+                procedure.setMachineMinutes((int) (Double.parseDouble(mesProcedure.getMachineHours()) * 60));
+            }
+            if (StringUtils.hasLength(mesProcedure.getHumanHours())) {
+                procedure.setHumanMinutes((int) (Double.parseDouble(mesProcedure.getHumanHours()) * 60));
+            }
+            if (StringUtils.hasLength(mesProcedure.getReworkFlag())) {
+                procedure.setRework(mesProcedure.getReworkFlag().equals("1"));
             }
             procedures.add(procedure);
         }
         procedures = procedureService.saveProcedures(procedures);
         Map<String, Procedure> map = procedures.stream()
-                .collect(Collectors.toMap(p -> p.getTaskNo() + "_" + p.getProcedureNo(), m1 -> m1, (p1, p2) -> p1));
+                .collect(Collectors.toMap(p -> p.getTask().getTaskNo() + "_" + p.getProcedureNo(), m1 -> m1, (p1, p2) -> p1));
         for (Procedure procedure : procedures) {
             List<Integer> numbers = procedure.getNextProcedureNo();
             if (CollectionUtil.isEmpty(numbers)) {
                 continue;
             }
             for (Integer number : numbers) {
-                Procedure nextProcedure = map.get(procedure.getTaskNo() + "_" + number);
+                Procedure nextProcedure = map.get(procedure.getTask().getTaskNo() + "_" + number);
                 if (nextProcedure != null) {
                     if (numbers.size() >= 2) {
                         nextProcedure.setParallel(true);
@@ -318,7 +237,7 @@ public class MesOrderService {
                 }
             }
         }
-        Map<String, List<Procedure>> maps = procedures.stream().collect(Collectors.groupingBy(Procedure::getTaskNo));
+        Map<String, List<Procedure>> maps = procedures.stream().collect(Collectors.groupingBy(procedure -> procedure.getTask().getTaskNo()));
         for (List<Procedure> value : maps.values()) {
             Procedure procedure = value.stream().min(Comparator.comparing(Procedure::getProcedureNo)).orElse(null);
             NodeLevelManager.calculateLevels(procedure);
@@ -327,23 +246,97 @@ public class MesOrderService {
         return procedureService.saveProcedures(procedures);
     }
 
-    private List<WorkCenter> convertWorkCenters(List<MesBaseWorkCenter> mesBaseWorkCenters) {
-        List<WorkCenter> workCenters = new ArrayList<>();
-        for (MesBaseWorkCenter baseWorkCenter : mesBaseWorkCenters) {
-            WorkCenter workCenter = new WorkCenter();
-            workCenter.setId(baseWorkCenter.getSeq());
-            workCenter.setName(baseWorkCenter.getDescription());
-            workCenter.setWorkCenterCode(baseWorkCenter.getWorkCenterCode());
-            workCenter.setStatus(baseWorkCenter.getStatus());
-            workCenters.add(workCenter);
-        }
-        return workCenterService.saveWorkCenters(workCenters);
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    @Qualifier("oracleTemplate")
+    public void setJdbcTemplate(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
-    public List<MesJjOrder> getMesOrders(List<String> orderNos) {
-        if (CollectionUtil.isNotEmpty(orderNos)) {
-            return mesOrderRepository.findAllByOrderNoIn(orderNos);
-        }
-        return mesOrderRepository.findAllByPlanStartDateAfterAndOrderStatusIn("2025-01-01", List.of("生产中","待生产"));
+    @Scheduled(cron = "0 0 1 * * *")
+    public void syncMesOrders() {
+        LocalDateTime now = LocalDate.now().minusDays(1).atStartOfDay();
+        String start = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String sql = " select t1.ORDERNO, " +
+                "       t1.PLAN_QUANTITY, " +
+                "       t1.ORDER_STATUS, " +
+                "       t1.ERP_STATUS, " +
+                "       t1.CONTRACTNUM as CONTRACT_NUM, " +
+                "       t1.PLAN_STARTDATE as PLAN_START_DATE, " +
+                "       t1.PLAN_ENDDATE as PLAN_END_DATE,  " +
+                "       t3.PRODUCT_CODE, " +
+                "       t3.PRODUCT_NAME, " +
+                "       t1.CREATEDATE as CREATE_DATE, " +
+                "       t1.FACT_STARTDATE as FACT_START_DATE, " +
+                "       t1.FACT_ENDDATE as FACT_END_DATE from MES_JJ_ORDER t1 " +
+                " inner join MES_JJ_ORDER_PRODUCT_INFO t3 on t1.ORDERNO=t3.ORDERNO " +
+                " where t1.ORDER_STATUS <> '生产完成' AND t1.ORDERNO like '00400%' " +
+                " and t1.CREATEDATE >= '" + start + "' and t1.ORDERNO not in (select t2.ORDER_NO from APS_ORDERS t2 " +
+                " where t2.CREATE_DATE >= TO_DATE('" + start + "','YYYY-MM-DD HH24:MI:SS'))";
+        List<Order> orders = jdbcTemplate.query(sql, new BeanPropertyRowMapper<>(Order.class));
+        orderService.saveAll(orders);
+        Lists.partition(orders, 100).forEach(this::mergePlannerData);
     }
+
+
+    public void syncUpdateMesOrders() {
+        String sql = " SELECT T1.* FROM MES_JJ_ORDER T1 " +
+                " INNER JOIN APS_ORDERS T2 ON T2.ORDER_NO=T1.ORDERNO " +
+                " WHERE T1.ORDER_STATUS!=T2.ORDER_STATUS " +
+                "   AND (TO_NUMBER(T1.PLAN_QUANTITY)= T2.PLAN_QUANTITY " +
+                "   OR TO_DATE(T1.PLAN_ENDDATE, 'YYYY-MM-DD') != T2.PLAN_END_DATE " +
+                "   OR TO_DATE(T1.PLAN_STARTDATE, 'YYYY-MM-DD') != T2.PLAN_START_DATE " +
+                "   OR TO_DATE(T1.FACT_STARTDATE, 'YYYY-MM-DD HH24:MI:SS')!= T2.FACT_START_DATE " +
+                "   OR TO_DATE(T1.FACT_ENDDATE, 'YYYY-MM-DD HH24:MI:SS') != T2.FACT_END_DATE )" +
+                " AND T1.CREATEDATE >= '2025-01-01 00:00:00' AND T1.ORDERNO LIKE '00400%' ";
+        List<MesJjOrder> mesJjOrders = jdbcTemplate.query(sql, new BeanPropertyRowMapper<>(MesJjOrder.class));
+        for (MesJjOrder mesJjOrder : mesJjOrders) {
+            Order order = orderService.getOrderById(mesJjOrder.getOrderNo()).orElse(null);
+            if (order != null) {
+                order.setOrderStatus(mesJjOrder.getOrderStatus());
+                order.setErpStatus(mesJjOrder.getErpStatus());
+                order.setContractNum(mesJjOrder.getContractNum());
+                order.setPlanQuantity(order.getPlanQuantity());
+                order.setPlanStartDate(DateUtils.parseLocalDate(mesJjOrder.getPlanStartDate()));
+                order.setPlanEndDate(DateUtils.parseLocalDate(mesJjOrder.getPlanEndDate()));
+                order.setFactStartDate(DateUtils.parseDateTime(mesJjOrder.getFactStartDate()));
+                order.setFactEndDate(DateUtils.parseDateTime(mesJjOrder.getFactEndDate()));
+                order.setPlanQuantity(Integer.valueOf(mesJjOrder.getPlanQuantity()));
+                orderService.save(order);
+            }
+        }
+    }
+
+    public void syncUpdateTask() {
+        String sql = " SELECT T1.* FROM MES_JJ_ORDER_TASK T1 " +
+                " INNER JOIN APS_TASK T2 ON T1.TASKNO = T2.TASK_NO " +
+                " WHERE T1.TASK_STATUS != T2.STATUS " +
+                "   AND ( TO_NUMBER(t1.PLAN_QUANTITY)= t2.PLANQUANTITY " +
+                "   OR TO_DATE(T1.PLAN_ENDDATE, 'YYYY-MM-DD') != T2.PLAN_END_DATE " +
+                "   OR TO_DATE(T1.PLAN_STARTDATE, 'YYYY-MM-DD') != T2.PLAN_START_DATE " +
+                "   OR TO_DATE(T1.FACT_STARTDATE, 'YYYY-MM-DD HH24:MI:SS')!= T2.FACT_START_DATE " +
+                "   OR TO_DATE(T1.FACT_ENDDATE, 'YYYY-MM-DD HH24:MI:SS') != T2.FACT_END_DATE )" +
+                "  AND T1.CREATEDATE >= '2025-01-01 00:00:00' AND t1.ORDERNO like '00400%'  ";
+        List<MesJjOrderTask> orderTasks = jdbcTemplate.query(sql, new BeanPropertyRowMapper<>(MesJjOrderTask.class));
+        for (MesJjOrderTask orderTask : orderTasks) {
+            Task task = orderTaskService.findById(orderTask.getTaskNo());
+            if (task != null) {
+                task.setStatus(orderTask.getTaskStatus());
+                task.setRouteId(orderTask.getRouteSeq());
+                task.setPlanStartDate(DateUtils.parseLocalDate(orderTask.getPlanStartDate()));
+                task.setPlanEndDate(DateUtils.parseLocalDate(orderTask.getPlanEndDate()));
+                task.setFactStartDate(DateUtils.parseDateTime(orderTask.getFactStartDate()));
+                task.setFactEndDate(DateUtils.parseDateTime(orderTask.getFactEndDate()));
+                task.setLockedRemark(orderTask.getLockedRemark());
+                task.setPlanQuantity(Integer.valueOf(orderTask.getPlanQuantity()));
+                orderTaskService.save(task);
+            }
+        }
+    }
+
+    public void syncUpdateProcedure() {
+
+    }
+
 }

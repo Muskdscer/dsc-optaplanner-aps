@@ -66,7 +66,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    @Transactional("oracleTransactionManager")
     public User register(RegisterRequest registerRequest) {
         // 检查用户名是否已存在
         if (userRepository.existsByUsername(registerRequest.getUsername())) {

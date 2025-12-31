@@ -17,6 +17,8 @@ export interface OrderTask {
     orderPlanQuantity: number;
     orderStatus: string;
     contractNum: string;
+    productCode: string;
+    productName: string;
 }
 
 // 任务数据类型定义（适配/api/orders/tasks接口）
@@ -29,6 +31,8 @@ export interface Task {
     planStartDate: string;
     planEndDate: string;
     priority: number;
+    productCode: string;
+    productName: string;
 }
 
 // ====================================

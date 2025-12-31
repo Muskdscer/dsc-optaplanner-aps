@@ -19,39 +19,31 @@ public class OrderService {
         this.orderRepository = orderRepository;
     }
 
-    public List<Order> getAllOrders() {
-        return orderRepository.findAll();
-    }
-
     public Optional<Order> getOrderById(String id) {
         return orderRepository.findById(id);
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public Order save(Order order) {
         return orderRepository.save(order);
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<Order> createOrders(List<Order> orders) {
         return orderRepository.saveAll(orders);
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void deleteOrder(String id) {
         orderRepository.deleteById(id);
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void deleteAll() {
         orderRepository.deleteAll();
     }
 
-    public List<Order> queryByOrderNoIn(List<String> orderNos) {
-        return orderRepository.queryByOrderNoIn(orderNos);
-    }
-
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<Order> saveAll(List<Order> orders) {
         return orderRepository.saveAll(orders);
     }

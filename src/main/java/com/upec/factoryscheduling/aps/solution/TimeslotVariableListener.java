@@ -10,7 +10,6 @@ import org.optaplanner.core.api.score.director.ScoreDirector;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.StampedLock;
 
 @Slf4j
@@ -32,19 +31,15 @@ public class TimeslotVariableListener implements VariableListener<FactorySchedul
 
     @Override
     public void afterVariableChanged(ScoreDirector<FactorySchedulingSolution> scoreDirector, Timeslot timeslot) {
-        Procedure procedure = timeslot.getProcedure();
-        if (procedure.getWorkCenterId() != null && procedure.getWorkCenterId().getWorkCenterCode().equals(WORK_CENTER_CODE)) {
-
-        }
-        // 当maintenance或duration变量变更时，更新时间槽的开始和结束时间
+        // 当maintenance变量变更时，更新时间槽的开始和结束时间
         if (timeslot.getMaintenance() != null) {
             WorkCenterMaintenance maintenance = timeslot.getMaintenance();
             // 使用ScoreDirector通知变量变更
             scoreDirector.beforeVariableChanged(timeslot, "startTime");
-            // 使用线程安全的方式更新时间槽的时间
+            // 更新开始时间
             LocalDateTime startTime = maintenance.getDate().atTime(maintenance.getStartTime());
             timeslot.setStartTime(startTime);
-            // 通知ScoreDirector变量已变更
+            // 通知ScoreDirector开始时间已变更
             scoreDirector.afterVariableChanged(timeslot, "startTime");
         }
     }

@@ -307,3 +307,13 @@ export const updateWorkCenterMaintenance = async (
   }
   return response;
 };
+
+// 外协工序时间槽拆分
+export const splitOutsourcingTimeslot = async (timeslotId: string, days: number): Promise<void> => {
+  const response: ApiResponse<void> = await apiClient.post(`/api/timeslot/${timeslotId}/split`, null, {
+    params: { days }
+  });
+  if (response.code !== 200) {
+    throw new Error(`拆分时间槽失败: ${response.msg || '未知错误'}`);
+  }
+};

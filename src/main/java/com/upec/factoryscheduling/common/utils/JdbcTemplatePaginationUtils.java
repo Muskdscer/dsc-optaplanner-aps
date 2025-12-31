@@ -4,9 +4,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,7 +37,6 @@ public class JdbcTemplatePaginationUtils {
             RowMapper<T> rowMapper,
             Integer pageNum,
             Integer pageSize) {
-        
         // 参数验证和默认值设置
         if (pageNum == null || pageNum < 1) {
             pageNum = 1;
@@ -40,26 +44,41 @@ public class JdbcTemplatePaginationUtils {
         if (pageSize == null || pageSize < 1) {
             pageSize = 20;
         }
-        
         // 构建总数查询SQL
         String countSql = "SELECT COUNT(*) FROM (" + sql + ") temp_count";
-        
         // 执行总数查询
         Integer total = jdbcTemplate.queryForObject(countSql, Integer.class);
-        
-        // 计算偏移量
-        int offset = (pageNum - 1) * pageSize;
-        
-        // 构建分页查询SQL（添加LIMIT和OFFSET）
-        String pageSql = sql + " LIMIT " + pageSize + " OFFSET " + offset;
-        
-        // 执行分页查询
+        // 计算起始行和结束行（Oracle使用行号）
+        String pageSql = getString(sql, pageNum, pageSize);
+        // 执行分页查询（使用ConnectionCallback）
         List<T> resultList = jdbcTemplate.query(pageSql, rowMapper);
-        
         // 创建Pageable对象
         Pageable pageable = PageRequest.of(pageNum - 1, pageSize);
-        
         // 返回Page对象
         return new PageImpl<>(resultList, pageable, total);
+    }
+
+    private static String getString(String sql, Integer pageNum, Integer pageSize) {
+        int startRow = (pageNum - 1) * pageSize + 1;
+        int endRow = pageNum * pageSize;
+        // 提取原始SQL中的ORDER BY子句
+        String orderByClause = "";
+        int orderByIndex = sql.toUpperCase().lastIndexOf(" ORDER BY ");
+        if (orderByIndex != -1) {
+            orderByClause = sql.substring(orderByIndex);
+            String pattern = "\\w*\\.";
+            orderByClause = orderByClause.replaceAll(pattern,"temp.");
+        }
+        // 如果原始SQL中没有ORDER BY子句，则添加默认排序（按行的自然顺序）
+        if (orderByClause.isEmpty()) {
+            orderByClause = " ORDER BY 1 ";
+        }
+        // 构建Oracle分页查询SQL（使用ROW_NUMBER()函数，包含ORDER BY子句）
+        String pageSql = "SELECT * FROM ( " +
+                         " SELECT temp.*, ROW_NUMBER() OVER ( " + orderByClause + " ) AS rn FROM ( " +
+                          sql +
+                         " ) temp" +
+                         " ) WHERE rn BETWEEN " + startRow + " AND " + endRow;
+        return pageSql;
     }
 }

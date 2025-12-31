@@ -1,6 +1,6 @@
 package com.upec.factoryscheduling.aps.service;
 
-import com.upec.factoryscheduling.aps.entity.Order;
+import com.upec.factoryscheduling.aps.entity.Procedure;
 import com.upec.factoryscheduling.aps.entity.Timeslot;
 import com.upec.factoryscheduling.aps.repository.TimeslotRepository;
 import com.upec.factoryscheduling.aps.resquest.ProcedureRequest;
@@ -16,7 +16,6 @@ import org.springframework.util.CollectionUtils;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,28 +29,7 @@ public class TimeslotService {
         this.timeslotRepository = timeslotRepository;
     }
 
-    private ProcedureService procedureService;
-
-    @Autowired
-    public void setProcedureService(ProcedureService procedureService) {
-        this.procedureService = procedureService;
-    }
-
-    private OrderTaskService orderTaskService;
-
-    @Autowired
-    public void setOrderTaskService(OrderTaskService orderTaskService) {
-        this.orderTaskService = orderTaskService;
-    }
-
-    private OrderService orderService;
-
-    @Autowired
-    public void setOrderService(OrderService orderService) {
-        this.orderService = orderService;
-    }
-
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public Timeslot updateTimeslot(ProcedureRequest request) {
 //        Order order = orderService.findFirstByOrderNo(request.getOrderNo());
 //        Machine machine = machineService.findFirstByMachineNo(request.getMachineNo());
@@ -74,49 +52,38 @@ public class TimeslotService {
     }
 
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<Timeslot> saveAll(List<Timeslot> timeslots) {
         return timeslotRepository.saveAll(timeslots);
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void deleteAll() {
         timeslotRepository.deleteAll();
     }
 
-    @Transactional("h2TransactionManager")
-    public List<Timeslot> receiverTimeslot(List<Timeslot> timeslots) {
-        return timeslotRepository.saveAll(timeslots);
-    }
-
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<Timeslot> saveTimeslot(List<Timeslot> timeslots) {
         return timeslotRepository.saveAll(timeslots);
     }
 
-    public List<Timeslot> findAllByOrderIn(List<Order> orders) {
-        Sort sort = Sort.by(Sort.Direction.DESC, "order", "procedureIndex", "index").ascending();
-        return timeslotRepository.findAllByOrderIn(orders, sort);
-    }
-
     public List<Timeslot> findAllByTaskIn(List<String> taskNos) {
-        Sort sort = Sort.by(Sort.Direction.DESC, "order", "procedureIndex", "index").ascending();
-        return timeslotRepository.findAllByTask_TaskNoIn(taskNos, sort);
+        Sort sort = Sort.by(Sort.Direction.DESC,  "procedureIndex", "index").ascending();
+        return timeslotRepository.findAllByProcedure_Task_TaskNoIsIn(taskNos, sort);
     }
 
-
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void createTimeslot(List<String> taskNos, List<String> timeslotIds, double time, int slice) {
         List<Timeslot> timeslots = new ArrayList<>();
         if (!CollectionUtils.isEmpty(taskNos)) {
-            timeslots = timeslotRepository.findAllByTask_TaskNoIn(taskNos);
+            timeslots = timeslotRepository.findAllByProcedure_Task_TaskNoIsIn(taskNos);
         }
         if (!CollectionUtils.isEmpty(timeslotIds)) {
             timeslots = timeslotRepository.findAllByIdIsIn(timeslotIds);
         }
         // 为每个工序创建分片Timeslot
         for (Timeslot timeslot : timeslots) {
-            if (timeslot.getProcedure().getWorkCenterId() == null) {
+            if (timeslot.getProcedure().getWorkCenter() == null) {
                 log.info("跳过未绑定工作中心的工序: {}", timeslot.getProcedure().getId());
                 continue;
             }
@@ -133,17 +100,6 @@ public class TimeslotService {
             }
             timeslotRepository.saveAll(newTimeslots);
         }
-    }
-
-
-    private void convertTimeslot(List<Timeslot> timeslots, int maxIndex, String skipId) {
-        AtomicInteger index = new AtomicInteger(maxIndex);
-        timeslots.stream().sorted(Comparator.comparing(Timeslot::getDuration)).forEach(timeslot -> {
-            if (!timeslot.getId().equals(skipId)) {
-                timeslot.setIndex(index.getAndIncrement());
-                timeslot.setId(timeslot.getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
-            }
-        });
     }
 
     private List<Timeslot> splitTimeslot(Timeslot timeslot, List<Timeslot> others, double time) {
@@ -163,7 +119,7 @@ public class TimeslotService {
             Timeslot newTimeslot = new Timeslot();
             BeanUtils.copyProperties(timeslot, newTimeslot);
             index++;
-            newTimeslot.setId(timeslot.getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
+            newTimeslot.setId(timeslot.getProcedure().getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
             newTimeslot.setDuration(Math.min(duration, (int) time));
             newTimeslot.setIndex(index);
             timeslots.add(newTimeslot);
@@ -185,7 +141,7 @@ public class TimeslotService {
             Timeslot newTimeslot = new Timeslot();
             BeanUtils.copyProperties(timeslot, newTimeslot);
             index++;
-            newTimeslot.setId(timeslot.getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
+            newTimeslot.setId(timeslot.getProcedure().getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
             newTimeslot.setIndex(index);
             newTimeslot.setDuration(Math.min(duration - (interval * i), interval));
             timeslots.add(newTimeslot);
@@ -193,4 +149,29 @@ public class TimeslotService {
         int total = timeslots.size();
         return timeslots.stream().peek(t -> t.setTotal(total)).collect(Collectors.toList());
     }
+
+
+    public void splitOutsourcingTimeslot(String timeId, int days) {
+        Timeslot timeslot = timeslotRepository.findById(timeId).orElse(null);
+        if (timeslot == null) {
+            return;
+        }
+        timeslot.setDuration(480);
+        timeslotRepository.save(timeslot);
+        Procedure procedure = timeslot.getProcedure();
+        List<Timeslot> timeslots = timeslotRepository.findAllByProcedure(procedure);
+        timeslot = timeslots.stream().max(Comparator.comparing(Timeslot::getIndex)).orElse(timeslot);
+        timeslot.setDuration(480);
+        timeslotRepository.save(timeslot);
+        int index = timeslot.getIndex();
+        for (int i = 1; i < days; i++) {
+            Timeslot newTimeslot = new Timeslot();
+            BeanUtils.copyProperties(timeslot, newTimeslot);
+            index++;
+            newTimeslot.setId(timeslot.getProcedure().getTask().getTaskNo() + "_" + timeslot.getProcedure().getProcedureNo() + "_" + index);
+            newTimeslot.setIndex(index);
+            timeslotRepository.save(newTimeslot);
+        }
+    }
+
 }

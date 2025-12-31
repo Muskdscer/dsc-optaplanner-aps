@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Entity
-@Table(name = "work_center_maintenance")
+@Table(name = "aps_work_center_maintenance")
 @Getter
 @Setter
 public class WorkCenterMaintenance implements Serializable {
@@ -19,11 +19,13 @@ public class WorkCenterMaintenance implements Serializable {
     private String id;
 
     @OneToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "work_center")
     private WorkCenter workCenter;
 
     @Column(name = "calendar_year")
     private int year;
 
+    @Column(name = "calendar_date")
     private LocalDate date;
 
     //机器容量(分钟)
@@ -33,10 +35,13 @@ public class WorkCenterMaintenance implements Serializable {
 
     private String description;
 
+    @Column(name = "start_time")
     private LocalTime startTime;
 
+    @Column(name = "end_time")
     private LocalTime endTime;
 
+    @Column(name = "usage_time")
     private int usageTime;
 
     /**

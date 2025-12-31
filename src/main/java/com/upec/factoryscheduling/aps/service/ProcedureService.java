@@ -8,14 +8,13 @@ import com.upec.factoryscheduling.aps.resquest.ProcedureRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.*;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import javax.persistence.criteria.Predicate;
 
 @Slf4j
 @Service
@@ -35,28 +34,23 @@ public class ProcedureService {
         this.procedureRepository = procedureRepository;
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<Procedure> saveProcedures(List<Procedure> procedures) {
         return procedureRepository.saveAll(procedures);
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public Procedure saveProcedure(Procedure procedure) {
         return procedureRepository.save(procedure);
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void deleteAll() {
         procedureRepository.deleteAll();
     }
 
-
-    public List<Procedure> findAllByIdIsIn(List<String> ids) {
-        return procedureRepository.findAllByIdIsIn(ids);
-    }
-
     public List<Procedure> findAllByTaskNoIsIn(List<String> taskNos) {
-        return procedureRepository.findAllByTaskNoIsIn(taskNos);
+        return procedureRepository.findAllByTask_TaskNoIsIn(taskNos);
     }
 
     /**
@@ -76,7 +70,7 @@ public class ProcedureService {
         for (Task task : taskPage.getContent()) {
             TaskExt taskExt = new TaskExt();
             BeanUtils.copyProperties(task, taskExt);
-            List<Procedure> procedures = procedureRepository.findAllByTaskNo(task.getTaskNo());
+            List<Procedure> procedures = procedureRepository.findAllByTask_TaskNo(task.getTaskNo());
             taskExt.setProcedures(procedures);
             taskExts.add(taskExt);
         }

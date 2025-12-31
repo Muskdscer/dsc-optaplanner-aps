@@ -27,7 +27,7 @@ public class OrderTaskService {
         this.taskRepository = taskRepository;
     }
 
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<Task> saveAll(List<Task> tasks) {
         return taskRepository.saveAll(tasks);
     }
@@ -49,6 +49,7 @@ public class OrderTaskService {
         if (pageNum == null || pageNum < 1) {
             pageNum = 1;
         }
+
         if (pageSize == null || pageSize < 1) {
             pageSize = 20; // 默认每页20条
         }
@@ -83,5 +84,15 @@ public class OrderTaskService {
 
     public List<Task> findAllByTaskNoIsIn(List<String> taskNos) {
         return taskRepository.findAllByTaskNoIsIn(taskNos);
+    }
+
+
+    public Task findById(String taskNo) {
+        return taskRepository.findById(taskNo).orElse(null);
+    }
+
+    @Transactional("oracleTransactionManager")
+    public void save(Task task) {
+        taskRepository.save(task);
     }
 }

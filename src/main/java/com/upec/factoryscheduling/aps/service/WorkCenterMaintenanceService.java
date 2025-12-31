@@ -62,7 +62,7 @@ public class WorkCenterMaintenanceService {
      * @param maintenance 设备维护记录对象
      * @return 保存后的设备维护记录
      */
-    @Transactional("h2TransactionManager") // 声明事务
+    @Transactional("oracleTransactionManager") // 声明事务
     public WorkCenterMaintenance save(WorkCenterMaintenance maintenance) {
         return maintenanceRepository.save(maintenance);
     }
@@ -76,7 +76,7 @@ public class WorkCenterMaintenanceService {
      * @param maintenances 设备维护记录列表
      * @return 保存后的设备维护记录列表
      */
-    @Transactional("h2TransactionManager") // 声明事务
+    @Transactional("oracleTransactionManager") // 声明事务
     public List<WorkCenterMaintenance> saveAll(List<WorkCenterMaintenance> maintenances) {
         return maintenanceRepository.saveAll(maintenances);
     }
@@ -90,7 +90,7 @@ public class WorkCenterMaintenanceService {
      * @param machine 工作中心（设备）对象
      * @return 生成的维护计划列表
      */
-    @Transactional("h2TransactionManager") // 声明事务
+    @Transactional("oracleTransactionManager") // 声明事务
     public List<WorkCenterMaintenance> autoCreateMaintenance(WorkCenter machine) {
         LocalDate now = LocalDate.now();
         List<WorkCenterMaintenance> maintenances = new ArrayList<>();
@@ -118,12 +118,10 @@ public class WorkCenterMaintenanceService {
         // 获取所有工作中心（设备）
         List<WorkCenter> machines = workCenterService.getAllMachines();
         List<WorkCenterMaintenance> maintenances = new ArrayList<>();
-
         // 为每个设备生成维护计划并添加到结果列表
         for (WorkCenter machine : machines) {
             maintenances.addAll(autoCreateMaintenance(machine));
         }
-
         return maintenances;
     }
 
@@ -149,7 +147,7 @@ public class WorkCenterMaintenanceService {
      * @return 更新后的维护计划列表
      * @throws IllegalArgumentException 如果开始时间晚于结束时间
      */
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<WorkCenterMaintenance> updateAll(List<WorkCenterMaintenance> maintenances) {
         List<WorkCenterMaintenance> list = maintenances.stream().map(maintenance -> {
             // 验证时间有效性
@@ -196,7 +194,7 @@ public class WorkCenterMaintenanceService {
      * 
      * @param maintenances 待保存或更新的维护计划列表
      */
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void saveAllMaintenance(List<WorkCenterMaintenance> maintenances) {
         if (!CollectionUtils.isEmpty(maintenances)) {
             for (WorkCenterMaintenance maintenance : maintenances) {
@@ -230,7 +228,7 @@ public class WorkCenterMaintenanceService {
      * @param maintenances 待创建的维护计划列表
      * @return 创建后的维护计划列表
      */
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public List<WorkCenterMaintenance> createMachineMaintenance(List<WorkCenterMaintenance> maintenances) {
         return maintenanceRepository.saveAll(maintenances);
     }
@@ -261,8 +259,7 @@ public class WorkCenterMaintenanceService {
      * @param end 结束日期
      * @return 符合条件的维护计划列表
      */
-    public List<WorkCenterMaintenance> findAllByMachineInAndDateBetween(List<WorkCenter> workCenters, LocalDate start,
-            LocalDate end) {
+    public List<WorkCenterMaintenance> findAllByMachineInAndDateBetween(List<WorkCenter> workCenters, LocalDate start, LocalDate end) {
         return maintenanceRepository.findAllByWorkCenterInAndDateBetween(workCenters, start, end);
     }
 
@@ -272,7 +269,7 @@ public class WorkCenterMaintenanceService {
      * 删除数据库中所有的设备维护计划记录，通常用于测试或重置环境。
      * </p>
      */
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void deleteAll() {
         maintenanceRepository.deleteAll();
     }

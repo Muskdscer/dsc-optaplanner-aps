@@ -44,4 +44,12 @@ public class TimeslotController {
         return ApiResponse.success(timeslotService.findAllByTaskIn(List.of(taskNo)));
     }
 
+
+    @PostMapping("/{timeslotId}/split")
+    public ApiResponse<Void> splitOutsourcingTimeslot(@PathVariable("timeslotId") String timeslotId,
+                                                      @RequestParam("days") int days) {
+        timeslotService.splitOutsourcingTimeslot(timeslotId, days);
+        return ApiResponse.success();
+    }
+
 }

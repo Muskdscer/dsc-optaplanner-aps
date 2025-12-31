@@ -58,32 +58,4 @@ public class MesJjOrder {
 
     @Column(name = "CONTRACTNUM", length = 50)
     private String contractNum;
-
-    public String getOrderNo() {
-        return orderNo;
-    }
-
-    public String getOrderStatus() {
-        return orderStatus;
-    }
-
-    public String getErpStatus() {
-        return erpStatus;
-    }
-
-    public String getPlanStartDate() {
-        return planStartDate;
-    }
-
-    public String getPlanEndDate() {
-        return planEndDate;
-    }
-
-    public String getFactStartDate() {
-        return factStartDate;
-    }
-
-    public String getFactEndDate() {
-        return factEndDate;
-    }
 }

@@ -31,7 +31,7 @@ public class ApsWorkCenterMaintenanceService {
         this.mesBaseWorkCenterService = mesBaseWorkCenterService;
     }
 
-    @Transactional("mysqlTransactionManager")
+    @Transactional("oracleTransactionManager")
     public void createWorkCenterMaintenance(List<MesBaseWorkCenter> mesBaseWorkCenters) {
         LocalDate startDate = LocalDate.of(2025, 1, 1);
         LocalDate endDate = LocalDate.of(2025, 12, 31);
@@ -60,19 +60,16 @@ public class ApsWorkCenterMaintenanceService {
      * @param endDate   结束日期
      * @return 创建的工作日历数量
      */
-    @Transactional("mysqlTransactionManager")
+    @Transactional("oracleTransactionManager")
     public int createWorkCalendarForAllCenters(LocalDate startDate, LocalDate endDate) {
         // 直接获取所有工作中心信息，避免额外的查询
-        List<MesBaseWorkCenter> allWorkCenters = mesBaseWorkCenterService.findAll();
+        List<MesBaseWorkCenter> allWorkCenters = mesBaseWorkCenterService.findAllByFactorySeq("2");
         int totalCreated = 0;
-
         if (allWorkCenters == null || allWorkCenters.isEmpty()) {
             return 0;
         }
-
         for (MesBaseWorkCenter baseWorkCenter : allWorkCenters) {
             List<ApsWorkCenterMaintenance> workCenterMaintenances = new ArrayList<>();
-
             // 为每个工作中心在指定日期范围内创建工作日历
             for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
                 ApsWorkCenterMaintenance workCenterMaintenance = new ApsWorkCenterMaintenance();
@@ -86,7 +83,6 @@ public class ApsWorkCenterMaintenanceService {
                 workCenterMaintenance.setDescription(baseWorkCenter.getDescription() );
                 workCenterMaintenances.add(workCenterMaintenance);
             }
-
             // 批量保存当前工作中心的所有工作日历
             saveAll(workCenterMaintenances);
             totalCreated += workCenterMaintenances.size();
@@ -102,7 +98,7 @@ public class ApsWorkCenterMaintenanceService {
      * @param workCenterMaintenances 工作中心维护计划列表
      */
 
-    @Transactional("mysqlTransactionManager")
+    @Transactional("oracleTransactionManager")
     public void saveAll(List<ApsWorkCenterMaintenance> workCenterMaintenances) {
         repository.saveAll(workCenterMaintenances);
     }

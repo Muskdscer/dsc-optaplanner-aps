@@ -9,8 +9,4 @@ import java.util.List;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, String> {
 
-    Order findFirstByOrderNo(String orderNo);
-
-    List<Order> queryByOrderNoIn(List<String> orderNos);
-
 }

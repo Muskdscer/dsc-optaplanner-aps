@@ -4,7 +4,6 @@ import com.upec.factoryscheduling.aps.entity.*;
 import com.upec.factoryscheduling.aps.response.TimeslotValidate;
 import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;
 import com.xkzhangsan.time.calculator.DateTimeCalculatorUtil;
-import io.micrometer.core.ipc.http.HttpSender;
 import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.score.ScoreExplanation;
 import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
@@ -142,17 +141,17 @@ public class SchedulingService {
         List<Timeslot> timeslots = timeslotService.findAllByTaskIn(taskNos);
         List<TimeslotValidate> timeslotValidates = new ArrayList<>();
         for (Timeslot timeslot : timeslots) {
-            if (timeslot.getWorkCenter() != null
-                    && timeslot.getWorkCenter().getWorkCenterCode().equals("PM10W200")
+            if (timeslot.getProcedure().getWorkCenter() != null
+                    && timeslot.getProcedure().getWorkCenter().getWorkCenterCode().equals("PM10W200")
                     && timeslot.getDuration() == 0) {
                 TimeslotValidate timeslotValidate = new TimeslotValidate();
-                timeslotValidate.setTaskNo(timeslot.getTask().getTaskNo());
+                timeslotValidate.setTaskNo(timeslot.getProcedure().getTask().getTaskNo());
                 timeslotValidate.setProcedureId(timeslot.getProcedure().getId());
                 timeslotValidate.setMessage("外协工序请先分配合理的外协时间!");
                 timeslotValidates.add(timeslotValidate);
                 continue;
             }
-            if (timeslot.getWorkCenter() != null && timeslot.getDuration() > 480) {
+            if (timeslot.getProcedure().getWorkCenter() != null && timeslot.getDuration() > 480) {
                 TimeslotValidate timeslotValidate = new TimeslotValidate();
             }
         }
@@ -232,20 +231,20 @@ public class SchedulingService {
         List<WorkCenter> workCenters = new ArrayList<>();
         // 查找与订单相关的所有时间槽并设置问题ID
         List<Timeslot> timeslots = timeslotService.findAllByTaskIn(taskNos).stream().peek(timeslot -> {
-            if (timeslot.getWorkCenter() != null) {
-                workCenters.add(timeslot.getWorkCenter());
+            if (timeslot.getProcedure().getWorkCenter() != null) {
+                workCenters.add(timeslot.getProcedure().getWorkCenter());
             }
             timeslot.setProblemId(problemId);
             if (timeslot.getProcedure().getStartTime() != null) {
                 timeslot.setManual(true);
             }
-        }).filter(timeslot -> timeslot.getWorkCenter() != null).collect(Collectors.toList());
+        }).filter(timeslot -> timeslot.getProcedure().getWorkCenter() != null).collect(Collectors.toList());
         // 确定时间范围（基于订单的计划开始和结束日期）
-        LocalDate start = timeslots.stream().map(Timeslot::getOrder)
+        LocalDate start = timeslots.stream().map(timeslot -> timeslot.getProcedure().getOrder())
                 .map(Order::getPlanStartDate)
                 .min(LocalDate::compareTo)
                 .orElse(LocalDate.now());
-        LocalDate end = timeslots.stream().map(Timeslot::getOrder)
+        LocalDate end = timeslots.stream().map(timeslot ->  timeslot.getProcedure().getOrder())
                 .map(Order::getPlanEndDate)
                 .max(LocalDate::compareTo)
                 .orElse(LocalDate.now());
@@ -332,7 +331,7 @@ public class SchedulingService {
      *
      * @param solution FactorySchedulingSolution - 求解器生成的调度解决方案
      */
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void saveSolution(FactorySchedulingSolution solution) {
         log.info("开始保存调度解决方案");
 
@@ -350,8 +349,8 @@ public class SchedulingService {
             if (timeslot.getMaintenance() == null) {
                 continue;
             }
-            if (!timeslot.getMaintenance().getWorkCenter().getWorkCenterCode().equals(timeslot.getWorkCenter().getWorkCenterCode())) {
-                log.info("机器匹配,任务号:{},工序号:{},是否匹配:{},数量:{}", timeslot.getTask().getTaskNo(),
+            if (!timeslot.getMaintenance().getWorkCenter().getWorkCenterCode().equals(timeslot.getProcedure().getWorkCenter().getWorkCenterCode())) {
+                log.info("机器匹配,任务号:{},工序号:{},是否匹配:{},数量:{}", timeslot.getProcedure().getTask().getTaskNo(),
                         timeslot.getProcedure().getProcedureNo(),
                         false, i++);
             }
@@ -518,7 +517,7 @@ public class SchedulingService {
      * <p>清空系统中的所有调度数据，包括时间槽、维护记录、工作中心、订单和工序信息。
      * 此方法主要用于测试或系统重置场景，谨慎使用。</p>
      */
-    @Transactional("h2TransactionManager")
+    @Transactional("oracleTransactionManager")
     public void delete() {
         // 按顺序删除所有相关数据
         timeslotService.deleteAll();
@@ -546,7 +545,7 @@ public class SchedulingService {
         // 按设备和日期分组时间槽
         Map<String, List<Timeslot>> map = timeslots.stream()
                 .collect(Collectors.groupingBy(timeslot ->
-                        timeslot.getProcedure().getWorkCenterId().getWorkCenterCode() + "-" +
+                        timeslot.getProcedure().getWorkCenter().getWorkCenterCode() + "-" +
                                 timeslot.getStartTime().toLocalDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
         // 遍历每个时间槽进行验证
         for (Timeslot timeslot : timeslots) {
@@ -555,7 +554,7 @@ public class SchedulingService {
                 continue;
             }
             // 构建当前时间槽的设备-日期键
-            String key = timeslot.getProcedure().getWorkCenterId().getWorkCenterCode() + "-" +
+            String key = timeslot.getProcedure().getWorkCenter().getWorkCenterCode() + "-" +
                     timeslot.getStartTime().toLocalDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             // 获取同一天同一设备的所有时间槽
             List<Timeslot> timeslotList = map.get(key);
@@ -565,13 +564,13 @@ public class SchedulingService {
                     .sum();
             // 获取时间和设备信息
             LocalDateTime dateTime = timeslot.getStartTime();
-            WorkCenter workCenter = timeslot.getProcedure().getWorkCenterId();
+            WorkCenter workCenter = timeslot.getProcedure().getWorkCenter();
             // 获取设备当日的维护计划（包含容量信息）
             WorkCenterMaintenance maintenance = maintenanceService.findFirstByMachineAndDate(workCenter, dateTime.toLocalDate());
             // 创建验证结果对象
             ValidateSolution validateSolution = new ValidateSolution(
                     timeslot.getProcedure(),
-                    timeslot.getOrder(),
+                    timeslot.getProcedure().getOrder(),
                     timeslot.getMaintenance().getWorkCenter(),
                     maintenance);
             // 检查是否超出设备容量

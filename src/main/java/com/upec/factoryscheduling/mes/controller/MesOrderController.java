@@ -23,7 +23,7 @@ public class MesOrderController {
 
     @PostMapping("/syncData")
     public ApiResponse<Void> syncData(@RequestBody List<String> orderNos) {
-        mesOrderService.mergePlannerData(orderNos);
+//        mesOrderService.mergePlannerData(orderNos);
         return ApiResponse.success();
     }
 

@@ -13,11 +13,9 @@ import java.util.List;
 @Repository
 public interface TimeslotRepository extends JpaRepository<Timeslot, String> {
 
-    List<Timeslot> findAllByOrderIn(List<Order> orders, Sort sort);
+    List<Timeslot> findAllByProcedure_Task_TaskNoIsIn(List<String> taskNos);
 
-    List<Timeslot> findAllByTask_TaskNoIn(List<String> taskNos);
-
-    List<Timeslot> findAllByTask_TaskNoIn(List<String> taskNos, Sort sort);
+    List<Timeslot> findAllByProcedure_Task_TaskNoIsIn(List<String> taskNos, Sort sort);
 
     List<Timeslot> findAllByProcedure(Procedure procedure);
 
