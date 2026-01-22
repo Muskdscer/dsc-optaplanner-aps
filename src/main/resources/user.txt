@@ -1,0 +1,4 @@
+    "username": "dsc123",
+    "password": "dsc123456",
+    "email": "test@example.com",
+    "phone": "13800138000"
