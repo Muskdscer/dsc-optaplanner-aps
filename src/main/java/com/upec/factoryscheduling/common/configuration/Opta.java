@@ -1,4 +1,4 @@
-//package com.upec.factoryscheduling.common.configuration;
+package com.upec.factoryscheduling.common.configuration;//package com.upec.factoryscheduling.common.configuration;
 //
 //import com.upec.factoryscheduling.aps.entity.Timeslot;
 //import com.upec.factoryscheduling.aps.solution.FactorySchedulingSolution;

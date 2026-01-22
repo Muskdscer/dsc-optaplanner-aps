@@ -50,12 +50,12 @@ public class Procedure implements Serializable {
 
     private boolean rework;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "asp_procedure_no_next")
     @Column(name = "next_procedure_no")
     private List<Integer> nextProcedureNo;
 
-    @ManyToMany(fetch = FetchType.EAGER, cascade = CascadeType.ALL)
+    @ManyToMany(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @JsonIgnore
     @JoinTable(name = "aps_procedure_next")
     private List<Procedure> nextProcedure;

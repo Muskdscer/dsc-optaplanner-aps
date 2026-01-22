@@ -29,7 +29,7 @@ public class TimeslotService {
         this.timeslotRepository = timeslotRepository;
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public Timeslot updateTimeslot(ProcedureRequest request) {
 //        Order order = orderService.findFirstByOrderNo(request.getOrderNo());
 //        Machine machine = machineService.findFirstByMachineNo(request.getMachineNo());
@@ -52,27 +52,44 @@ public class TimeslotService {
     }
 
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public List<Timeslot> saveAll(List<Timeslot> timeslots) {
         return timeslotRepository.saveAll(timeslots);
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void deleteAll() {
         timeslotRepository.deleteAll();
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public List<Timeslot> saveTimeslot(List<Timeslot> timeslots) {
         return timeslotRepository.saveAll(timeslots);
     }
 
+    @Transactional("mysqlTransactionManager")
     public List<Timeslot> findAllByTaskIn(List<String> taskNos) {
-        Sort sort = Sort.by(Sort.Direction.DESC,  "procedureIndex", "index").ascending();
-        return timeslotRepository.findAllByProcedure_Task_TaskNoIsIn(taskNos, sort);
+        // 使用 JOIN FETCH 预加载 nextProcedure，避免懒加载异常
+        List<Timeslot> timeslots = timeslotRepository.findAllByProcedure_Task_TaskNoIsInWithNextProcedures(taskNos);
+        // 在事务内访问 nextProcedureNo 以触发 ElementCollection 的懒加载
+        for (Timeslot timeslot : timeslots) {
+            if (timeslot.getProcedure() != null && timeslot.getProcedure().getNextProcedureNo() != null) {
+                // 触发懒加载
+                timeslot.getProcedure().getNextProcedureNo().size();
+            }
+        }
+        // 手动排序，因为 @Query 不支持 Sort 参数
+        Sort sort = Sort.by(Sort.Direction.DESC, "procedureIndex", "index").ascending();
+        return timeslots.stream()
+                .sorted((t1, t2) -> {
+                    int compare = Integer.compare(t2.getProcedureIndex(), t1.getProcedureIndex());
+                    if (compare != 0) return compare;
+                    return Integer.compare(t1.getIndex(), t2.getIndex());
+                })
+                .collect(Collectors.toList());
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void createTimeslot(List<String> taskNos, List<String> timeslotIds, double time, int slice) {
         List<Timeslot> timeslots = new ArrayList<>();
         if (!CollectionUtils.isEmpty(taskNos)) {

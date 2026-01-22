@@ -91,7 +91,7 @@ public class OrderTaskService {
         return taskRepository.findById(taskNo).orElse(null);
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void save(Task task) {
         taskRepository.save(task);
     }

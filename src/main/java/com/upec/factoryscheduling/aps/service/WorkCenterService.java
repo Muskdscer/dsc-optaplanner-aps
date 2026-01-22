@@ -25,7 +25,7 @@ public class WorkCenterService {
      * @param workCenterRepository 工作中心数据访问层实例
      */
     @Autowired
-    private void setMachineRepository(WorkCenterRepository workCenterRepository) {
+    private void setWorkCenterRepository(WorkCenterRepository workCenterRepository) {
         this.workCenterRepository = workCenterRepository;
     }
 
@@ -52,7 +52,7 @@ public class WorkCenterService {
      * @param workCenter 包含更新信息的工作中心对象
      * @return 更新后的工作中心实体，若不存在则返回null
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public WorkCenter updateMachine(String id, WorkCenter workCenter) {
         Optional<WorkCenter> machine = workCenterRepository.findById(id);
         if (machine.isPresent()) {
@@ -67,7 +67,7 @@ public class WorkCenterService {
      * 删除工作中心
      * @param id 要删除的工作中心ID
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void deleteMachine(String id) {
         workCenterRepository.deleteById(id);
     }
@@ -77,7 +77,7 @@ public class WorkCenterService {
      * @param workCenters 工作中心列表
      * @return 保存后的工作中心列表
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public List<WorkCenter> saveWorkCenters(List<WorkCenter> workCenters) {
         return workCenterRepository.saveAll(workCenters);
     }
@@ -87,7 +87,7 @@ public class WorkCenterService {
      * @param machines 工作中心列表
      * @return 创建后的工作中心列表
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public List<WorkCenter> create(List<WorkCenter> machines) {
         return workCenterRepository.saveAll(machines);
     }
@@ -97,7 +97,7 @@ public class WorkCenterService {
      * 清空所有工作中心数据
      * <p>使用事务保证原子性操作</p>
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void deleteAll() {
         workCenterRepository.deleteAll();
     }

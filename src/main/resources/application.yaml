@@ -4,28 +4,28 @@ spring:
       ddl-auto: update
     show-sql: true
   datasource:
-    h2:
-      driver-class-name: org.h2.Driver
-      username: sa
-      jdbc-url: jdbc:h2:tcp://127.0.0.1:9092/h2-data/test
-    oracle:  # 禁用Oracle配置，但保留配置信息
-      driver-class-name: oracle.jdbc.OracleDriver
-      jdbc-url: jdbc:oracle:thin:@localhost:1521:orclcdb
-      username: C##UPEC_MES
-      password: UPEC_MES
-      pool-name: oracle-pool-1
-      minimum-idle: 5
-      maximum-pool-size: 20
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-      leak-detection-threshold: 60000
-      initialization-fail-timeout: 1
+#    h2:
+#      driver-class-name: org.h2.Driver
+#      username: sa
+#      jdbc-url: jdbc:h2:tcp://127.0.0.1:9092/h2-data/test
+#    oracle:  # 禁用Oracle配置，但保留配置信息
+#      driver-class-name: oracle.jdbc.OracleDriver
+#      jdbc-url: jdbc:oracle:thin:@localhost:1521:orclcdb
+#      username: sa
+#      password:
+#      pool-name: oracle-pool-1
+#      minimum-idle: 5
+#      maximum-pool-size: 20
+#      connection-timeout: 30000
+#      idle-timeout: 600000
+#      max-lifetime: 1800000
+#      leak-detection-threshold: 60000
+#      initialization-fail-timeout: 1
     mysql:  # 添加MySQL配置
       driver-class-name: com.mysql.cj.jdbc.Driver
-      jdbc-url: jdbc:mysql://localhost:3306/MES?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      jdbc-url: jdbc:mysql://localhost:3306/mes?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       username: root
-      password: 123456
+      password: root
       pool-name: mysql-pool-1
       minimum-idle: 5
       maximum-pool-size: 20
@@ -40,7 +40,7 @@ spring:
       settings:
         web-allow-others: true
 server:
-  port: 8080
+  port: 8081
 
 # JWT 配置
 jwt:

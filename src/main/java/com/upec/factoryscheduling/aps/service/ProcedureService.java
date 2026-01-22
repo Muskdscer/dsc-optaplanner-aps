@@ -34,17 +34,17 @@ public class ProcedureService {
         this.procedureRepository = procedureRepository;
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public List<Procedure> saveProcedures(List<Procedure> procedures) {
         return procedureRepository.saveAll(procedures);
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public Procedure saveProcedure(Procedure procedure) {
         return procedureRepository.save(procedure);
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void deleteAll() {
         procedureRepository.deleteAll();
     }

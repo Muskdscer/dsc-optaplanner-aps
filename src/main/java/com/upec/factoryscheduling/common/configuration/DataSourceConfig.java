@@ -19,18 +19,18 @@ public class DataSourceConfig {
 //        return DataSourceBuilder.create().type(HikariDataSource.class).build();
 //    }
 
-    @Bean(name = "oracleDataSource")
-    @Primary
-    @ConfigurationProperties(prefix = "spring.datasource.oracle")
-    public DataSource oracleDataSource() {
-        return DataSourceBuilder.create().type(HikariDataSource.class).build();
-    }
-
-//    @Bean(name = "mysqlDataSource")
-//    @Primary  // 设置MySQL为主要数据源
-//    @ConfigurationProperties(prefix = "spring.datasource.mysql")
-//    public DataSource mysqlDataSource() {
+//    @Bean(name = "oracleDataSource")
+//    @Primary
+//    @ConfigurationProperties(prefix = "spring.datasource.oracle")
+//    public DataSource oracleDataSource() {
 //        return DataSourceBuilder.create().type(HikariDataSource.class).build();
 //    }
+
+    @Bean(name = "mysqlDataSource")
+    @Primary  // 设置MySQL为主要数据源
+    @ConfigurationProperties(prefix = "spring.datasource.mysql")
+    public DataSource mysqlDataSource() {
+        return DataSourceBuilder.create().type(HikariDataSource.class).build();
+    }
 
 }

@@ -331,7 +331,7 @@ public class SchedulingService {
      *
      * @param solution FactorySchedulingSolution - 求解器生成的调度解决方案
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void saveSolution(FactorySchedulingSolution solution) {
         log.info("开始保存调度解决方案");
 
@@ -517,7 +517,7 @@ public class SchedulingService {
      * <p>清空系统中的所有调度数据，包括时间槽、维护记录、工作中心、订单和工序信息。
      * 此方法主要用于测试或系统重置场景，谨慎使用。</p>
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void delete() {
         // 按顺序删除所有相关数据
         timeslotService.deleteAll();
