@@ -27,7 +27,7 @@ public class OrderTaskService {
         this.taskRepository = taskRepository;
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public List<Task> saveAll(List<Task> tasks) {
         return taskRepository.saveAll(tasks);
     }

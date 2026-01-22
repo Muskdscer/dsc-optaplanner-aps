@@ -43,7 +43,7 @@ public class OrderService {
         orderRepository.deleteAll();
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public List<Order> saveAll(List<Order> orders) {
         return orderRepository.saveAll(orders);
     }

@@ -27,7 +27,7 @@ public class MesJjProcedureService {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    @Qualifier("oracleTemplate")
+    @Qualifier("mySqlTemplate")
     public void setJdbcTemplate(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }

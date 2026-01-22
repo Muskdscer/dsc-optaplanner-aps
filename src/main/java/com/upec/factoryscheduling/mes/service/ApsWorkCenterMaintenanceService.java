@@ -31,7 +31,7 @@ public class ApsWorkCenterMaintenanceService {
         this.mesBaseWorkCenterService = mesBaseWorkCenterService;
     }
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void createWorkCenterMaintenance(List<MesBaseWorkCenter> mesBaseWorkCenters) {
         LocalDate startDate = LocalDate.of(2025, 1, 1);
         LocalDate endDate = LocalDate.of(2025, 12, 31);
@@ -60,7 +60,7 @@ public class ApsWorkCenterMaintenanceService {
      * @param endDate   结束日期
      * @return 创建的工作日历数量
      */
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public int createWorkCalendarForAllCenters(LocalDate startDate, LocalDate endDate) {
         // 直接获取所有工作中心信息，避免额外的查询
         List<MesBaseWorkCenter> allWorkCenters = mesBaseWorkCenterService.findAllByFactorySeq("2");
@@ -98,7 +98,7 @@ public class ApsWorkCenterMaintenanceService {
      * @param workCenterMaintenances 工作中心维护计划列表
      */
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void saveAll(List<ApsWorkCenterMaintenance> workCenterMaintenances) {
         repository.saveAll(workCenterMaintenances);
     }

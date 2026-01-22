@@ -21,7 +21,7 @@ public class MesJjOrderTaskService {
     private MesJjOrderTaskRepository mesJjOrderTaskRepository;
 
     @Autowired
-    @Qualifier("oracleTemplate")
+    @Qualifier("mySqlTemplate")
     private JdbcTemplate oracleTemplate;
 
     @Autowired

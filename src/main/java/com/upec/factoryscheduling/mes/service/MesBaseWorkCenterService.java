@@ -66,7 +66,7 @@ public class MesBaseWorkCenterService {
     }
 
 
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void asyncWorkCenterData() {
         List<MesBaseWorkCenter> mesBaseWorkCenters = findAllByFactorySeq("2");
         convertWorkCenters(mesBaseWorkCenters);

@@ -19,7 +19,7 @@ public class SchedulingJobService {
     private WorkCenterService workCenterService;
 
     @Scheduled(cron = "0 0 0 * * *")
-    @Transactional("oracleTransactionManager")
+    @Transactional("mysqlTransactionManager")
     public void syncWorkCenterData() {
         workCenterService.deleteAll();
         mesBaseWorkCenterService.asyncWorkCenterData();
